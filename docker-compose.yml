@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: research_postgres
+    environment:
+      POSTGRES_DB: research_papers
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - research_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: research_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - research_network
+
+  fastmcp_server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: research_fastmcp
+    environment:
+      DATABASE_URL: postgresql://admin:password123@postgres:5432/research_papers
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - minio
+    networks:
+      - research_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: research_frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - fastmcp_server
+    networks:
+      - research_network
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  research_network:
+    driver: bridge 
