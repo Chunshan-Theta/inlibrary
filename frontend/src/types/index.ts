@@ -100,6 +100,46 @@ export interface ApiResponse<T> {
   message?: string
 }
 
+// Excel 導入相關類型
+export interface ExcelColumnInfo {
+  name: string
+  sample_values: string[]
+  data_type: 'text' | 'number' | 'date'
+  non_null_count: number
+}
+
+export interface ExcelPreviewData {
+  columns: ExcelColumnInfo[]
+  sample_rows: Record<string, string | null>[]
+  total_rows: number
+  filename: string
+}
+
+export interface FieldMapping {
+  excel_column: string
+  target_field: string
+  is_required: boolean
+}
+
+export interface DefaultFieldMapping {
+  target_field: string
+  display_name: string
+  is_required: boolean
+  description: string
+  suggestions: string[]
+}
+
+export interface ExcelImportConfig {
+  field_mappings: FieldMapping[]
+  preview_file_id: string
+}
+
+export interface ExcelPreviewResponse {
+  preview: ExcelPreviewData
+  file_id: string
+  default_mappings: DefaultFieldMapping[]
+}
+
 export interface ExcelImportResult {
   total_rows: number
   successful_imports: number

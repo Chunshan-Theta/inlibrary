@@ -21,13 +21,13 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
 
   // 預覽Excel文件的mutation
   const previewMutation = useMutation(papersApi.previewExcel, {
-    onSuccess: (result: ExcelPreviewResponse) => {
+    onSuccess: (result) => {
       setPreviewData(result)
       // 初始化欄位映射
       initializeFieldMappings(result)
       setCurrentStep('preview')
     },
-    onError: (error: any) => {
+    onError: (error) => {
       console.error('Excel預覽失敗:', error)
       alert('Excel預覽失敗，請檢查文件格式')
     }
@@ -35,12 +35,12 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
 
   // 導入Excel的mutation
   const importMutation = useMutation(papersApi.importExcelWithConfig, {
-    onSuccess: (result: ExcelImportResult) => {
+    onSuccess: (result) => {
       setImportResult(result)
       setCurrentStep('result')
       queryClient.invalidateQueries('papers')
     },
-    onError: (error: any) => {
+    onError: (error) => {
       console.error('Excel導入失敗:', error)
       alert('Excel導入失敗')
       setCurrentStep('configure')
@@ -135,8 +135,8 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
   }
 
   const handleMappingChange = (targetField: string, excelColumn: string) => {
-    setFieldMappings((prev: FieldMapping[]) => 
-      prev.map((mapping: FieldMapping) => 
+    setFieldMappings(prev => 
+      prev.map(mapping => 
         mapping.target_field === targetField 
           ? { ...mapping, excel_column: excelColumn }
           : mapping
@@ -148,7 +148,7 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
     if (!previewData) return
     
     const config: ExcelImportConfig = {
-      field_mappings: fieldMappings.filter((mapping: FieldMapping) => mapping.excel_column),
+      field_mappings: fieldMappings.filter(mapping => mapping.excel_column),
       preview_file_id: previewData.file_id
     }
     
@@ -167,7 +167,7 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
   }
 
   const getDefaultMapping = (targetField: string): DefaultFieldMapping | undefined => {
-    return previewData?.default_mappings.find((m: DefaultFieldMapping) => m.target_field === targetField)
+    return previewData?.default_mappings.find(m => m.target_field === targetField)
   }
 
   if (!isOpen) return null
@@ -498,4 +498,4 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
       </div>
     </div>
   )
-} 
+}

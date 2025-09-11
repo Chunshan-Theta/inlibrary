@@ -131,6 +131,27 @@ class ComplexSearchQuery(BaseModel):
 FilterGroup.model_rebuild()
 
 # Excel import schemas
+class ExcelColumnInfo(BaseModel):
+    name: str
+    sample_values: List[str]
+    data_type: str
+    non_null_count: int
+
+class ExcelPreviewData(BaseModel):
+    columns: List[ExcelColumnInfo]
+    sample_rows: List[dict]
+    total_rows: int
+    filename: str
+
+class FieldMapping(BaseModel):
+    excel_column: str
+    target_field: str
+    is_required: bool = False
+
+class ExcelImportConfig(BaseModel):
+    field_mappings: List[FieldMapping]
+    preview_file_id: str  # 臨時文件ID，用於後續導入
+
 class ExcelImportResult(BaseModel):
     total_rows: int
     successful_imports: int

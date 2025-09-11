@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { Paper, SearchFilters, PaperCreate, Author, Tag, Venue, ExcelImportResult, ComplexSearchQuery } from '../types'
+import { Paper, SearchFilters, PaperCreate, Author, Tag, Venue, ExcelImportResult, ComplexSearchQuery, ExcelPreviewResponse, ExcelImportConfig } from '../types'
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
@@ -82,7 +82,26 @@ export const papersApi = {
     await api.delete(`/papers/${id}`)
   },
 
-  // Excel 導入
+  // Excel 預覽
+  async previewExcel(file: File): Promise<ExcelPreviewResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await api.post('/papers/preview-excel/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+
+  // Excel 配置導入
+  async importExcelWithConfig(config: ExcelImportConfig): Promise<ExcelImportResult> {
+    const response = await api.post('/papers/import-excel-with-config/', config)
+    return response.data
+  },
+
+  // Excel 導入（舊版本，保持兼容性）
   async importExcel(file: File): Promise<ExcelImportResult> {
     const formData = new FormData()
     formData.append('file', file)

@@ -14,7 +14,9 @@ from schemas import (
     VenueCreate, VenueResponse,
     SearchFilters,
     ComplexSearchQuery,
-    ExcelImportResult
+    ExcelImportResult,
+    ExcelPreviewData,
+    ExcelImportConfig
 )
 from crud import (
     create_paper, get_papers, get_paper, update_paper, delete_paper,
@@ -24,7 +26,7 @@ from crud import (
     search_papers, search_papers_complex
 )
 from minio_client import upload_file, download_file, delete_file
-from excel_import import import_excel_file
+from excel_import import import_excel_file, preview_excel_file, get_default_field_mappings, import_excel_with_config
 
 # 創建數據庫表
 Base.metadata.create_all(bind=engine)
@@ -213,6 +215,48 @@ async def create_venue_endpoint(venue: VenueCreate, db: Session = Depends(get_db
 async def read_venues(db: Session = Depends(get_db)):
     """獲取期刊/會議列表"""
     return get_venues(db)
+
+# Excel 預覽端點
+@app.post("/papers/preview-excel/")
+async def preview_excel_endpoint(
+    file: UploadFile = File(...)
+):
+    """預覽Excel文件內容和欄位"""
+    # 驗證文件類型
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="只支持Excel文件 (.xlsx, .xls)")
+    
+    try:
+        # 讀取文件內容
+        file_content = await file.read()
+        
+        # 預覽數據
+        preview_data, file_id = preview_excel_file(file_content, file.filename)
+        
+        # 獲取默認欄位映射
+        default_mappings = get_default_field_mappings()
+        
+        return {
+            "preview": preview_data,
+            "file_id": file_id,
+            "default_mappings": default_mappings
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Excel預覽失敗: {str(e)}")
+
+# Excel 配置導入端點
+@app.post("/papers/import-excel-with-config/", response_model=ExcelImportResult)
+async def import_excel_with_config_endpoint(
+    config: ExcelImportConfig,
+    db: Session = Depends(get_db)
+):
+    """使用欄位配置導入Excel文件"""
+    try:
+        result = import_excel_with_config(config, db)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Excel導入失敗: {str(e)}")
 
 # Excel 導入端點
 @app.post("/papers/import-excel/", response_model=ExcelImportResult)
