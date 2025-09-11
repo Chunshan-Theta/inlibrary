@@ -165,15 +165,46 @@ def search_papers_complex(db: Session, query_data: ComplexSearchQuery, skip: int
         joinedload(Paper.tags).joinedload(PaperTag.tag)
     )
     
+    # 檢查是否需要 JOIN
+    needs_author_join = check_needs_author_join(query_data.root)
+    needs_tag_join = check_needs_tag_join(query_data.root)
+    
+    # 添加必要的 JOIN
+    if needs_author_join:
+        query = query.join(PaperAuthor).join(Author)
+    
+    if needs_tag_join:
+        query = query.join(PaperTag).join(Tag)
+    
     # 構建查詢條件
-    conditions = build_query_conditions(db, query_data.root, query)
+    conditions = build_query_conditions(db, query_data.root)
     
     if conditions is not None:
         query = query.filter(conditions)
     
     return query.distinct().offset(skip).limit(limit).all()
 
-def build_query_conditions(db: Session, group: FilterGroup, query):
+def check_needs_author_join(group: FilterGroup) -> bool:
+    """檢查是否需要 author JOIN"""
+    for condition in group.conditions:
+        if condition.field == 'author_name':
+            return True
+    for subgroup in group.groups:
+        if check_needs_author_join(subgroup):
+            return True
+    return False
+
+def check_needs_tag_join(group: FilterGroup) -> bool:
+    """檢查是否需要 tag JOIN"""
+    for condition in group.conditions:
+        if condition.field == 'tags':
+            return True
+    for subgroup in group.groups:
+        if check_needs_tag_join(subgroup):
+            return True
+    return False
+
+def build_query_conditions(db: Session, group: FilterGroup):
     """遞歸構建查詢條件"""
     conditions = []
     
@@ -185,7 +216,7 @@ def build_query_conditions(db: Session, group: FilterGroup, query):
     
     # 遞歸處理子群組
     for subgroup in group.groups:
-        subgroup_condition = build_query_conditions(db, subgroup, query)
+        subgroup_condition = build_query_conditions(db, subgroup)
         if subgroup_condition is not None:
             conditions.append(subgroup_condition)
     
@@ -211,20 +242,19 @@ def build_single_condition(condition: FilterCondition):
     try:
         if field == 'title_keyword':
             if operator == 'contains':
-                return func.to_tsvector('english', Paper.title).match(str(value))
+                return Paper.title.ilike(f'%{str(value)}%')
             elif operator == 'equals':
                 return Paper.title == str(value)
                 
         elif field == 'abstract_keyword':
             if operator == 'contains':
-                return func.to_tsvector('english', Paper.abstract).match(str(value))
+                return Paper.abstract.ilike(f'%{str(value)}%')
             elif operator == 'equals':
                 return Paper.abstract == str(value)
                 
         elif field == 'author_name':
-            # 注意：這裡需要在主查詢中處理 JOIN
             if operator == 'contains':
-                return func.to_tsvector('english', Author.name).match(str(value))
+                return Author.name.ilike(f'%{str(value)}%')
             elif operator == 'equals':
                 return Author.name == str(value)
                 
