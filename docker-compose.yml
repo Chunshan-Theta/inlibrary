@@ -13,6 +13,11 @@ services:
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - research_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d research_papers"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio:latest
@@ -28,6 +33,11 @@ services:
       - minio_data:/data
     networks:
       - research_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
 
   fastmcp_server:
     build:
@@ -42,8 +52,10 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - minio
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     networks:
       - research_network
 
