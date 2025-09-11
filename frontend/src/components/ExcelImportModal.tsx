@@ -3,14 +3,14 @@ import { useMutation, useQueryClient } from 'react-query'
 import { papersApi } from '../api/papers'
 import { ExcelImportResult, ExcelPreviewResponse, FieldMapping, DefaultFieldMapping, ExcelImportConfig } from '../types'
 
-interface ExcelImportModalProps {
+interface FileImportModalProps {
   isOpen: boolean
   onClose: () => void
 }
 
 type ImportStep = 'upload' | 'preview' | 'configure' | 'importing' | 'result'
 
-export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalProps) {
+export function FileImportModal({ isOpen, onClose }: FileImportModalProps) {
   const [currentStep, setCurrentStep] = useState<ImportStep>('upload')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewData, setPreviewData] = useState<ExcelPreviewResponse | null>(null)
@@ -19,8 +19,8 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
   const [showDetails, setShowDetails] = useState(false)
   const queryClient = useQueryClient()
 
-  // 預覽Excel文件的mutation
-  const previewMutation = useMutation(papersApi.previewExcel, {
+  // 預覽文件的mutation
+  const previewMutation = useMutation(papersApi.previewFile, {
     onSuccess: (result: ExcelPreviewResponse) => {
       setPreviewData(result)
       // 初始化欄位映射
@@ -28,21 +28,21 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
       setCurrentStep('preview')
     },
     onError: (error: any) => {
-      console.error('Excel預覽失敗:', error)
-      alert('Excel預覽失敗，請檢查文件格式')
+      console.error('文件預覽失敗:', error)
+      alert('文件預覽失敗，請檢查文件格式')
     }
   })
 
-  // 導入Excel的mutation
-  const importMutation = useMutation(papersApi.importExcelWithConfig, {
+  // 導入文件的mutation
+  const importMutation = useMutation(papersApi.importFileWithConfig, {
     onSuccess: (result: ExcelImportResult) => {
       setImportResult(result)
       setCurrentStep('result')
       queryClient.invalidateQueries('papers')
     },
     onError: (error: any) => {
-      console.error('Excel導入失敗:', error)
-      alert('Excel導入失敗')
+      console.error('文件導入失敗:', error)
+      alert('文件導入失敗')
       setCurrentStep('configure')
     }
   })
@@ -118,8 +118,11 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-        alert('請選擇Excel文件 (.xlsx 或 .xls)')
+      const validExtensions = ['.xlsx', '.xls', '.csv', '.tsv']
+      const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+      
+      if (!hasValidExtension) {
+        alert('請選擇數據文件 (.xlsx, .xls, .csv, .tsv)')
         return
       }
       setSelectedFile(file)
@@ -177,7 +180,7 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-full overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Excel 文件導入</h2>
+            <h2 className="text-2xl font-bold text-gray-900">數據文件導入</h2>
             <button
               onClick={handleClose}
               className="text-gray-400 hover:text-gray-600"
@@ -225,20 +228,20 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h3 className="text-sm font-medium text-blue-800 mb-2">支持的文件格式</h3>
                 <ul className="text-sm text-blue-700 space-y-1">
-                  <li>• Web of Science 導出的 Excel 文件 (.xlsx, .xls)</li>
+                  <li>• Web of Science 導出的文件 (.xlsx, .xls, .csv, .tsv)</li>
                   <li>• 文件應包含論文標題、作者、發表年份等基本信息</li>
                   <li>• 系統會自動識別並匹配欄位，您也可以手動配置</li>
                 </ul>
               </div>
 
               <div>
-                <label htmlFor="excel_file" className="block text-sm font-medium text-gray-700 mb-2">
-                  選擇 Excel 文件
+                <label htmlFor="data_file" className="block text-sm font-medium text-gray-700 mb-2">
+                  選擇數據文件
                 </label>
                 <input
                   type="file"
-                  id="excel_file"
-                  accept=".xlsx,.xls"
+                  id="data_file"
+                  accept=".xlsx,.xls,.csv,.tsv"
                   onChange={handleFileChange}
                   className="block w-full text-sm text-gray-500
                     file:mr-4 file:py-2 file:px-4
@@ -247,6 +250,9 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
                     file:bg-blue-50 file:text-blue-700
                     hover:file:bg-blue-100"
                 />
+                <p className="mt-1 text-sm text-gray-500">
+                  支持 Excel (.xlsx, .xls)、CSV (.csv) 和 TSV (.tsv) 文件
+                </p>
                 {selectedFile && (
                   <p className="mt-2 text-sm text-green-600">
                     已選擇文件: {selectedFile.name}
@@ -341,7 +347,7 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">欄位映射配置</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  請為每個目標欄位選擇對應的Excel欄位。系統已為您智能匹配了可能的對應關係。
+                  請為每個目標欄位選擇對應的數據文件欄位。系統已為您智能匹配了可能的對應關係。
                 </p>
               </div>
 
@@ -370,7 +376,7 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
                           
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              選擇Excel欄位
+                              選擇數據欄位
                             </label>
                             <select
                               value={mapping.excel_column}
@@ -498,4 +504,17 @@ export default function ExcelImportModal({ isOpen, onClose }: ExcelImportModalPr
       </div>
     </div>
   )
-} 
+}
+
+// Excel 兼容性組件
+interface ExcelImportModalProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+export function ExcelImportModal({ isOpen, onClose }: ExcelImportModalProps) {
+  return <FileImportModal isOpen={isOpen} onClose={onClose} />
+}
+
+// 将 FileImportModal 设为默认导出，保持向后兼容
+export default FileImportModal 

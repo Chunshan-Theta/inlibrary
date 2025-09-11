@@ -26,7 +26,7 @@ from crud import (
     search_papers, search_papers_complex
 )
 from minio_client import upload_file, download_file, delete_file
-from excel_import import import_excel_file, preview_excel_file, get_default_field_mappings, import_excel_with_config
+from excel_import import import_excel_file, preview_file, get_default_field_mappings, import_file_with_config, import_file
 
 # 創建數據庫表
 Base.metadata.create_all(bind=engine)
@@ -216,7 +216,36 @@ async def read_venues(db: Session = Depends(get_db)):
     """獲取期刊/會議列表"""
     return get_venues(db)
 
-# Excel 預覽端點
+# 文件預覽端點
+@app.post("/papers/preview-file/")
+async def preview_file_endpoint(
+    file: UploadFile = File(...)
+):
+    """預覽文件內容和欄位（支持Excel、CSV、TSV）"""
+    # 驗證文件類型
+    if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv', '.tsv')):
+        raise HTTPException(status_code=400, detail="只支持Excel文件 (.xlsx, .xls)、CSV文件 (.csv) 和TSV文件 (.tsv)")
+    
+    try:
+        # 讀取文件內容
+        file_content = await file.read()
+        
+        # 預覽數據
+        preview_data, file_id = preview_file(file_content, file.filename)
+        
+        # 獲取默認欄位映射
+        default_mappings = get_default_field_mappings()
+        
+        return {
+            "preview": preview_data,
+            "file_id": file_id,
+            "default_mappings": default_mappings
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"文件預覽失敗: {str(e)}")
+
+# Excel 預覽端點（兼容性）
 @app.post("/papers/preview-excel/")
 async def preview_excel_endpoint(
     file: UploadFile = File(...)
@@ -231,7 +260,7 @@ async def preview_excel_endpoint(
         file_content = await file.read()
         
         # 預覽數據
-        preview_data, file_id = preview_excel_file(file_content, file.filename)
+        preview_data, file_id = preview_file(file_content, file.filename)
         
         # 獲取默認欄位映射
         default_mappings = get_default_field_mappings()
@@ -245,7 +274,20 @@ async def preview_excel_endpoint(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Excel預覽失敗: {str(e)}")
 
-# Excel 配置導入端點
+# 文件配置導入端點
+@app.post("/papers/import-file-with-config/", response_model=ExcelImportResult)
+async def import_file_with_config_endpoint(
+    config: ExcelImportConfig,
+    db: Session = Depends(get_db)
+):
+    """使用欄位配置導入文件（支持Excel、CSV、TSV）"""
+    try:
+        result = import_file_with_config(config, db)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"文件導入失敗: {str(e)}")
+
+# Excel 配置導入端點（兼容性）
 @app.post("/papers/import-excel-with-config/", response_model=ExcelImportResult)
 async def import_excel_with_config_endpoint(
     config: ExcelImportConfig,
@@ -253,12 +295,35 @@ async def import_excel_with_config_endpoint(
 ):
     """使用欄位配置導入Excel文件"""
     try:
-        result = import_excel_with_config(config, db)
+        result = import_file_with_config(config, db)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Excel導入失敗: {str(e)}")
 
-# Excel 導入端點
+# 文件導入端點
+@app.post("/papers/import-file/", response_model=ExcelImportResult)
+async def import_file_endpoint(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """從文件導入論文數據（支持Excel、CSV、TSV）"""
+    # 驗證文件類型
+    if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv', '.tsv')):
+        raise HTTPException(status_code=400, detail="只支持Excel文件 (.xlsx, .xls)、CSV文件 (.csv) 和TSV文件 (.tsv)")
+    
+    try:
+        # 讀取文件內容
+        file_content = await file.read()
+        
+        # 導入數據
+        result = import_file(db, file_content, file.filename)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"文件導入失敗: {str(e)}")
+
+# Excel 導入端點（兼容性）
 @app.post("/papers/import-excel/", response_model=ExcelImportResult)
 async def import_excel_endpoint(
     file: UploadFile = File(...),

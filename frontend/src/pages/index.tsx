@@ -44,7 +44,7 @@ export default function Home() {
                 className="btn-secondary flex items-center space-x-2"
               >
                 <DocumentArrowUpIcon className="h-5 w-5" />
-                <span>Excel 導入</span>
+                <span>文件導入</span>
               </button>
               <button
                 onClick={() => setIsAddModalOpen(true)}
@@ -79,7 +79,7 @@ export default function Home() {
           onClose={() => setIsAddModalOpen(false)}
         />
 
-        {/* Excel 導入彈窗 */}
+        {/* 文件導入彈窗 */}
         <ExcelImportModal 
           isOpen={isImportModalOpen} 
           onClose={() => setIsImportModalOpen(false)}

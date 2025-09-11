@@ -21,3 +21,7 @@ down: ## 停止所有服務
 clean: ## 清除所有服務鏡像
 	@echo "🧹 清除所有服務鏡像..."
 	docker-compose down -v
+
+ps: ## 查看服務狀態
+	@echo "📋 服務狀態:"
+	docker-compose ps

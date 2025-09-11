@@ -130,31 +130,37 @@ class ComplexSearchQuery(BaseModel):
 # 需要更新 FilterGroup 的前向引用
 FilterGroup.model_rebuild()
 
-# Excel import schemas
-class ExcelColumnInfo(BaseModel):
+# File import schemas
+class FileColumnInfo(BaseModel):
     name: str
     sample_values: List[str]
     data_type: str
     non_null_count: int
 
-class ExcelPreviewData(BaseModel):
-    columns: List[ExcelColumnInfo]
+class FilePreviewData(BaseModel):
+    columns: List[FileColumnInfo]
     sample_rows: List[dict]
     total_rows: int
     filename: str
 
 class FieldMapping(BaseModel):
-    excel_column: str
+    excel_column: str  # 保持命名以維持兼容性
     target_field: str
     is_required: bool = False
 
-class ExcelImportConfig(BaseModel):
+class FileImportConfig(BaseModel):
     field_mappings: List[FieldMapping]
     preview_file_id: str  # 臨時文件ID，用於後續導入
 
-class ExcelImportResult(BaseModel):
+class FileImportResult(BaseModel):
     total_rows: int
     successful_imports: int
     failed_imports: int
     errors: List[str]
-    imported_papers: List[PaperResponse] 
+    imported_papers: List[PaperResponse]
+
+# Excel compatibility aliases
+ExcelColumnInfo = FileColumnInfo
+ExcelPreviewData = FilePreviewData  
+ExcelImportConfig = FileImportConfig
+ExcelImportResult = FileImportResult 

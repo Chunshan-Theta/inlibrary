@@ -166,7 +166,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
               {/* DOI */}
               <div>
                 <label htmlFor="doi" className="block text-sm font-medium text-gray-700 mb-1">
-                  DOI
+                  DOI *
                 </label>
                 <input
                   type="text"

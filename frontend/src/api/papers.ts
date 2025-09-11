@@ -82,7 +82,20 @@ export const papersApi = {
     await api.delete(`/papers/${id}`)
   },
 
-  // Excel 預覽
+  // 文件預覽（支持Excel、CSV、TSV）
+  async previewFile(file: File): Promise<ExcelPreviewResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await api.post('/papers/preview-file/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+
+  // Excel 預覽（兼容性）
   async previewExcel(file: File): Promise<ExcelPreviewResponse> {
     const formData = new FormData()
     formData.append('file', file)
@@ -95,9 +108,28 @@ export const papersApi = {
     return response.data
   },
 
-  // Excel 配置導入
+  // 文件配置導入（支持Excel、CSV、TSV）
+  async importFileWithConfig(config: ExcelImportConfig): Promise<ExcelImportResult> {
+    const response = await api.post('/papers/import-file-with-config/', config)
+    return response.data
+  },
+
+  // Excel 配置導入（兼容性）
   async importExcelWithConfig(config: ExcelImportConfig): Promise<ExcelImportResult> {
     const response = await api.post('/papers/import-excel-with-config/', config)
+    return response.data
+  },
+
+  // 文件導入（支持Excel、CSV、TSV）
+  async importFile(file: File): Promise<ExcelImportResult> {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await api.post('/papers/import-file/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
     return response.data
   },
 

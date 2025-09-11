@@ -5,6 +5,7 @@ import re
 import uuid
 import tempfile
 import os
+import io
 from models import Paper, Author, PaperAuthor, Venue
 from crud import create_author, create_venue, get_author, get_venue
 from schemas import ExcelImportResult, PaperResponse, ExcelPreviewData, ExcelColumnInfo, ExcelImportConfig, FieldMapping
@@ -12,11 +13,21 @@ from schemas import ExcelImportResult, PaperResponse, ExcelPreviewData, ExcelCol
 # 臨時文件存儲
 TEMP_FILES = {}
 
-def preview_excel_file(file_content: bytes, filename: str) -> ExcelPreviewData:
-    """預覽Excel文件內容"""
+def preview_file(file_content: bytes, filename: str) -> ExcelPreviewData:
+    """預覽文件內容（支持Excel、CSV、TSV）"""
     try:
-        # 讀取Excel文件
-        df = pd.read_excel(file_content)
+        # 根據文件擴展名讀取不同格式的文件
+        file_ext = filename.lower().split('.')[-1]
+        
+        if file_ext in ['xlsx', 'xls']:
+            df = pd.read_excel(file_content)
+        elif file_ext == 'csv':
+            df = pd.read_csv(io.BytesIO(file_content))
+        elif file_ext == 'tsv':
+            df = pd.read_csv(io.BytesIO(file_content), sep='\t')
+        else:
+            raise Exception(f"不支持的文件格式: {file_ext}")
+        
         
         # 生成預覽數據
         columns = []
@@ -57,9 +68,9 @@ def preview_excel_file(file_content: bytes, filename: str) -> ExcelPreviewData:
                     row_dict[col] = str(value)
             sample_rows.append(row_dict)
         
-        # 生成臨時文件ID並存儲
+        # 生成臨時文件ID並存儲文件內容和文件名
         file_id = str(uuid.uuid4())
-        TEMP_FILES[file_id] = file_content
+        TEMP_FILES[file_id] = (file_content, filename)
         
         return ExcelPreviewData(
             columns=columns,
@@ -69,7 +80,7 @@ def preview_excel_file(file_content: bytes, filename: str) -> ExcelPreviewData:
         ), file_id
         
     except Exception as e:
-        raise Exception(f"讀取Excel文件預覽時出錯: {str(e)}")
+        raise Exception(f"讀取文件預覽時出錯: {str(e)}")
 
 def get_default_field_mappings() -> List[Dict[str, Any]]:
     """獲取默認的欄位映射"""
@@ -218,16 +229,27 @@ def map_excel_row_to_paper_with_config(row: pd.Series, field_mappings: List[Fiel
         errors.append(f"處理行數據時出錯: {str(e)}")
         return None, errors
 
-def import_excel_with_config(config: ExcelImportConfig, db: Session) -> ExcelImportResult:
-    """使用配置導入Excel文件"""
+def import_file_with_config(config: ExcelImportConfig, db: Session) -> ExcelImportResult:
+    """使用配置導入文件（支持Excel、CSV、TSV）"""
     try:
-        # 從臨時存儲中獲取文件內容
-        file_content = TEMP_FILES.get(config.preview_file_id)
-        if not file_content:
+        # 從臨時存儲中獲取文件內容和文件名
+        file_data = TEMP_FILES.get(config.preview_file_id)
+        if not file_data:
             raise Exception("預覽文件已過期，請重新上傳")
         
-        # 讀取Excel文件
-        df = pd.read_excel(file_content)
+        file_content, filename = file_data
+        
+        # 根據文件擴展名讀取不同格式的文件
+        file_ext = filename.lower().split('.')[-1]
+        
+        if file_ext in ['xlsx', 'xls']:
+            df = pd.read_excel(file_content)
+        elif file_ext == 'csv':
+            df = pd.read_csv(io.BytesIO(file_content))
+        elif file_ext == 'tsv':
+            df = pd.read_csv(io.BytesIO(file_content), sep='\t')
+        else:
+            raise Exception(f"不支持的文件格式: {file_ext}")
         
         total_rows = len(df)
         successful_imports = 0
@@ -460,8 +482,84 @@ def map_excel_row_to_paper(row: pd.Series, db: Session) -> Tuple[Optional[Dict[s
         errors.append(f"處理行數據時出錯: {str(e)}")
         return None, errors
 
+def import_file(db: Session, file_content: bytes, filename: str) -> ExcelImportResult:
+    """導入文件（支持Excel、CSV、TSV）"""
+    try:
+        # 根據文件擴展名讀取不同格式的文件
+        file_ext = filename.lower().split('.')[-1]
+        
+        if file_ext in ['xlsx', 'xls']:
+            df = pd.read_excel(file_content)
+        elif file_ext == 'csv':
+            df = pd.read_csv(io.BytesIO(file_content))
+        elif file_ext == 'tsv':
+            df = pd.read_csv(io.BytesIO(file_content), sep='\t')
+        else:
+            raise Exception(f"不支持的文件格式: {file_ext}")
+        
+        total_rows = len(df)
+        successful_imports = 0
+        failed_imports = 0
+        errors = []
+        imported_papers = []
+        
+        for index, row in df.iterrows():
+            try:
+                paper_data, row_errors = map_excel_row_to_paper(row, db)
+                
+                if paper_data:
+                    # 創建論文
+                    from schemas import PaperCreate
+                    paper_create = PaperCreate(**paper_data)
+                    
+                    # 檢查DOI是否已存在
+                    if paper_data.get('doi'):
+                        existing_paper = db.query(Paper).filter(Paper.doi == paper_data['doi']).first()
+                        if existing_paper:
+                            errors.append(f"行 {index + 1}: DOI {paper_data['doi']} 已存在")
+                            failed_imports += 1
+                            continue
+                    
+                    # 檢查標題是否已存在
+                    existing_paper = db.query(Paper).filter(Paper.title == paper_data['title']).first()
+                    if existing_paper:
+                        errors.append(f"行 {index + 1}: 標題 '{paper_data['title'][:50]}...' 已存在")
+                        failed_imports += 1
+                        continue
+                    
+                    from crud import create_paper
+                    new_paper = create_paper(db, paper_create)
+                    imported_papers.append(new_paper)
+                    successful_imports += 1
+                    
+                else:
+                    failed_imports += 1
+                    for error in row_errors:
+                        errors.append(f"行 {index + 1}: {error}")
+                        
+            except Exception as e:
+                failed_imports += 1
+                errors.append(f"行 {index + 1}: {str(e)}")
+        
+        return ExcelImportResult(
+            total_rows=total_rows,
+            successful_imports=successful_imports,
+            failed_imports=failed_imports,
+            errors=errors,
+            imported_papers=imported_papers
+        )
+        
+    except Exception as e:
+        return ExcelImportResult(
+            total_rows=0,
+            successful_imports=0,
+            failed_imports=0,
+            errors=[f"讀取文件時出錯: {str(e)}"],
+            imported_papers=[]
+        )
+
 def import_excel_file(db: Session, file_content: bytes) -> ExcelImportResult:
-    """導入Excel文件"""
+    """導入Excel文件（兼容性函數）"""
     try:
         # 讀取Excel文件
         df = pd.read_excel(file_content)
