@@ -31,7 +31,7 @@ const createSimpleCondition = (): SimpleCondition => ({
   field: 'title_keyword',
   operator: 'contains',
   value: '',
-  logicOperator: 'AND'
+  logicOperator: 'OR'
 })
 
 const createSimpleGroup = (name: string, isFirst: boolean = false): SimpleGroup => ({
@@ -166,10 +166,10 @@ export default function QueryBuilder({ onSearch, onReset }: QueryBuilderProps) {
           <div className="flex items-center space-x-2 bg-gray-100 px-3 py-1 rounded-full">
             <span className="text-sm text-gray-600">關係:</span>
             <select
-              value={'OR'}
+              value={group.conditions[index - 1]?.logicOperator || 'OR'}
               onChange={(e) => {
                 updateCondition(groupId, group.conditions[index - 1].id, { 
-                  logicOperator: e.target.value as 'AND' | 'OR' 
+                  logicOperator: 'OR' // 強制為OR
                 })
               }}
               className="border-0 bg-transparent text-sm font-medium focus:ring-0"
@@ -399,18 +399,13 @@ export default function QueryBuilder({ onSearch, onReset }: QueryBuilderProps) {
         return `${fieldName}${operatorName}"${displayValue}"`
       })
       
-      // 用邏輯操作符連接條件
+      // 條件間一律用 OR 連接
       const joinedConditions = conditionTexts.reduce((acc: string, conditionText: string, index: number) => {
         if (index === 0) return conditionText
-        
-        const prevCondition = validConditions[index - 1]
-        const logic = prevCondition?.logicOperator === 'OR' ? ' OR ' : ' AND '
-        return acc + logic + conditionText
+        return acc + ' OR ' + conditionText
       }, '')
-      
       // 如果群組有多個條件，用括號包圍
       const groupText = validConditions.length > 1 ? `(${joinedConditions})` : joinedConditions
-      
       return groupText
     }).filter((text: string) => text !== '')
     
@@ -454,38 +449,18 @@ export default function QueryBuilder({ onSearch, onReset }: QueryBuilderProps) {
         )
         
         if (validConditions.length > 0) {
-          // 檢查群組內條件的邏輯關係
-          const hasOrCondition = validConditions.some((c, index) => 
-            index > 0 && validConditions[index - 1]?.logicOperator === 'OR'
-          )
-          
-          if (hasOrCondition) {
-            // 群組內有OR關係，使用OR操作符
-            allGroupConditions.push({
-              id: group.id,
-              operator: 'OR',
-              conditions: validConditions.map(c => ({
-                id: c.id,
-                field: c.field as any,
-                operator: c.operator as any,
-                value: c.value
-              })),
-              groups: []
-            })
-          } else {
-            // 群組內都是AND關係，使用AND操作符
-            allGroupConditions.push({
-              id: group.id,
-              operator: 'AND',
-              conditions: validConditions.map(c => ({
-                id: c.id,
-                field: c.field as any,
-                operator: c.operator as any,
-                value: c.value
-              })),
-              groups: []
-            })
-          }
+          // 條件間一律使用OR操作符
+          allGroupConditions.push({
+            id: group.id,
+            operator: 'OR',
+            conditions: validConditions.map(c => ({
+              id: c.id,
+              field: c.field as any,
+              operator: c.operator as any,
+              value: c.value
+            })),
+            groups: []
+          })
         }
       })
       
