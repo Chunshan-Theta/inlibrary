@@ -166,7 +166,7 @@ export default function QueryBuilder({ onSearch, onReset }: QueryBuilderProps) {
           <div className="flex items-center space-x-2 bg-gray-100 px-3 py-1 rounded-full">
             <span className="text-sm text-gray-600">關係:</span>
             <select
-              value={group.conditions[index - 1]?.logicOperator || 'OR'}
+              value={'OR'}
               onChange={(e) => {
                 updateCondition(groupId, group.conditions[index - 1].id, { 
                   logicOperator: e.target.value as 'AND' | 'OR' 
