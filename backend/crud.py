@@ -17,7 +17,8 @@ def create_paper(db: Session, paper: PaperCreate):
         doi=paper.doi,
         citation_count=paper.citation_count,
         venue_id=paper.venue_id,
-        keywords=paper.keywords
+        keywords=paper.keywords,
+        url=paper.url
     )
     db.add(db_paper)
     db.commit()

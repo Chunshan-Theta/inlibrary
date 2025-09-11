@@ -140,6 +140,13 @@ def get_default_field_mappings() -> List[Dict[str, Any]]:
             "is_required": False,
             "description": "論文關鍵字，多個關鍵字用分號分隔",
             "suggestions": ["Author Keywords", "Keywords Plus", "Keywords", "关键词"]
+        },
+        {
+            "target_field": "url",
+            "display_name": "論文連結",
+            "is_required": False,
+            "description": "論文的在線連結或URL",
+            "suggestions": ["URL", "Link", "Paper URL", "Full Text URL", "连接", "链接", "网址"]
         }
     ]
 
@@ -212,6 +219,12 @@ def map_excel_row_to_paper_with_config(row: pd.Series, field_mappings: List[Fiel
                     if author:
                         author_ids.append(author.id)
         
+        # 處理URL
+        url = None
+        url_column = mapping_dict.get('url')
+        if url_column:
+            url = clean_string(row.get(url_column))
+        
         paper_data = {
             'title': title,
             'abstract': abstract,
@@ -220,7 +233,8 @@ def map_excel_row_to_paper_with_config(row: pd.Series, field_mappings: List[Fiel
             'citation_count': citation_count,
             'venue_id': venue_id,
             'keywords': keywords,
-            'author_ids': author_ids
+            'author_ids': author_ids,
+            'url': url
         }
         
         return paper_data, errors
