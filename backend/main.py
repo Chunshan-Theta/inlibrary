@@ -55,7 +55,20 @@ async def root():
 @app.post("/papers/", response_model=PaperResponse)
 async def create_paper_endpoint(paper: PaperCreate, db: Session = Depends(get_db)):
     """創建新論文"""
-    return create_paper(db=db, paper=paper)
+    try:
+        return create_paper(db=db, paper=paper)
+    except ValueError as e:
+        # DOI重複或其他業務邏輯錯誤
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # 檢查是否是DOI重複錯誤
+        if "duplicate key value violates unique constraint" in str(e) and "papers_doi_key" in str(e):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"DOI '{paper.doi}' 已存在，請檢查是否重複添加論文"
+            )
+        # 其他數據庫錯誤
+        raise HTTPException(status_code=500, detail=f"創建論文時發生錯誤: {str(e)}")
 
 @app.get("/papers/", response_model=List[PaperResponse])
 async def read_papers(

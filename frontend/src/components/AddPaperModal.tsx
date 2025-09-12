@@ -43,36 +43,80 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
       
       alert('論文添加成功！')
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('創建論文失敗:', error)
-      alert('創建論文失敗，請稍後再試')
+      // 處理後端返回的錯誤信息
+      let errorMessage = '請聯繫管理員'
+      if (error?.response?.data?.detail) {
+        errorMessage = error.response.data.detail
+      } else if (error?.detail) {
+        errorMessage = error.detail
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+      alert(`創建論文失敗: ${errorMessage}`)
     }
   })
 
-  const onSubmit = (data: PaperCreate) => {
-    // 處理作者ID數組
-    const authorIds = Array.from(
-      document.querySelectorAll('input[name="author_ids"]:checked') as NodeListOf<HTMLInputElement>
-    ).map(input => parseInt(input.value))
+  const onSubmit = async (data: PaperCreate) => {
+    try {
+      // 處理作者名稱轉換為ID
+      let authorIds: number[] = []
+      if (data.author_names) {
+        const authorNames = (data.author_names as any).split(',').map((name: string) => name.trim()).filter((name: string) => name)
+        for (const name of authorNames) {
+          // 查找是否已存在該作者
+          const existingAuthor = authors?.find(author => author.name === name)
+          if (existingAuthor) {
+            authorIds.push(existingAuthor.id)
+          } else {
+            // 創建新作者
+            const newAuthor = await authorsApi.createAuthor({ name })
+            authorIds.push(newAuthor.id)
+          }
+        }
+      }
 
-    // 處理標籤ID數組
-    const tagIds = Array.from(
-      document.querySelectorAll('input[name="tag_ids"]:checked') as NodeListOf<HTMLInputElement>
-    ).map(input => parseInt(input.value))
+      // 處理標籤名稱轉換為ID
+      let tagIds: number[] = []
+      if (data.tag_names) {
+        const tagNames = (data.tag_names as any).split(',').map((name: string) => name.trim()).filter((name: string) => name)
+        for (const name of tagNames) {
+          // 查找是否已存在該標籤
+          const existingTag = tags?.find(tag => tag.name === name)
+          if (existingTag) {
+            tagIds.push(existingTag.id)
+          } else {
+            // 創建新標籤，使用隨機顏色
+            const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#F97316', '#06B6D4', '#84CC16']
+            const randomColor = colors[Math.floor(Math.random() * colors.length)]
+            const newTag = await tagsApi.createTag({ name, color: randomColor })
+            tagIds.push(newTag.id)
+          }
+        }
+      }
 
-    // 處理關鍵字數組
-    const keywords = data.keywords ? 
-      (data.keywords as any).split(',').map((k: string) => k.trim()).filter((k: string) => k) : 
-      []
+      // 處理關鍵字數組
+      const keywords = data.keywords ? 
+        (data.keywords as any).split(',').map((k: string) => k.trim()).filter((k: string) => k) : 
+        []
 
-    const submitData: PaperCreate = {
-      ...data,
-      author_ids: authorIds,
-      tag_ids: tagIds,
-      keywords: keywords
+      const submitData: PaperCreate = {
+        ...data,
+        author_ids: authorIds,
+        tag_ids: tagIds,
+        keywords: keywords
+      }
+
+      createPaperMutation.mutate(submitData)
+      
+      // 重新獲取作者和標籤列表
+      queryClient.invalidateQueries('authors')
+      queryClient.invalidateQueries('tags')
+    } catch (error) {
+      console.error('處理作者或標籤時發生錯誤:', error)
+      alert('處理作者或標籤時發生錯誤，請檢查輸入')
     }
-
-    createPaperMutation.mutate(submitData)
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -240,54 +284,35 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
               <p className="mt-1 text-xs text-gray-500">請用逗號分隔多個關鍵字</p>
             </div>
 
-            {/* 作者選擇 */}
-            {authors && authors.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  選擇作者
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-32 overflow-y-auto border rounded p-3">
-                  {authors.map((author) => (
-                    <label key={author.id} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        name="author_ids"
-                        value={author.id}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span className="ml-2 text-sm">{author.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* 作者輸入 */}
+            <div>
+              <label htmlFor="author_names" className="block text-sm font-medium text-gray-700 mb-1">
+                作者
+              </label>
+              <input
+                type="text"
+                id="author_names"
+                {...register('author_names')}
+                className="input-field"
+                placeholder="用逗號分隔作者姓名，例如：張三, 李四, 王五"
+              />
+              <p className="mt-1 text-xs text-gray-500">請用逗號分隔多個作者姓名，如果作者不存在會自動創建</p>
+            </div>
 
-            {/* 標籤選擇 */}
-            {tags && tags.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  選擇標籤
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((tag) => (
-                    <label key={tag.id} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        name="tag_ids"
-                        value={tag.id}
-                        className="sr-only"
-                      />
-                      <span 
-                        className="text-sm px-3 py-1 rounded cursor-pointer border-2 border-transparent hover:border-gray-300"
-                        style={{ backgroundColor: tag.color, color: 'white' }}
-                      >
-                        {tag.name}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* 標籤輸入 */}
+            <div>
+              <label htmlFor="tag_names" className="block text-sm font-medium text-gray-700 mb-1">
+                標籤
+              </label>
+              <input
+                type="text"
+                id="tag_names"
+                {...register('tag_names')}
+                className="input-field"
+                placeholder="用逗號分隔標籤名稱，例如：機器學習, 深度學習, 資料科學"
+              />
+              <p className="mt-1 text-xs text-gray-500">請用逗號分隔多個標籤名稱，如果標籤不存在會自動創建</p>
+            </div>
 
             {/* PDF 文件上傳 */}
             <div>

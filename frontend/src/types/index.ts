@@ -93,6 +93,8 @@ export interface PaperCreate {
   url?: string
   author_ids?: number[]
   tag_ids?: number[]
+  author_names?: string  // 新增：作者名稱（逗號分隔）
+  tag_names?: string     // 新增：標籤名稱（逗號分隔）
 }
 
 export interface ApiResponse<T> {

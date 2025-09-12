@@ -8,7 +8,17 @@ from schemas import (
 )
 
 # Paper CRUD operations
+def check_doi_exists(db: Session, doi: str) -> bool:
+    """檢查DOI是否已存在"""
+    if not doi:
+        return False
+    return db.query(Paper).filter(Paper.doi == doi).first() is not None
+
 def create_paper(db: Session, paper: PaperCreate):
+    # 檢查DOI是否已存在
+    if paper.doi and check_doi_exists(db, paper.doi):
+        raise ValueError(f"DOI '{paper.doi}' 已存在")
+    
     # 創建論文記錄
     db_paper = Paper(
         title=paper.title,
