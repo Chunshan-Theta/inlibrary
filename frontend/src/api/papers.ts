@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { Paper, SearchFilters, PaperCreate, Author, Tag, Venue, ExcelImportResult, ComplexSearchQuery, ExcelPreviewResponse, ExcelImportConfig } from '../types'
+import { Paper, SearchFilters, PaperCreate, Author, Tag, Venue, ExcelImportResult, ComplexSearchQuery, ExcelPreviewResponse, ExcelImportConfig, BatchTagOperation, BatchTagResult } from '../types'
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
@@ -80,6 +80,12 @@ export const papersApi = {
   // 刪除論文
   async deletePaper(id: number): Promise<void> {
     await api.delete(`/papers/${id}`)
+  },
+
+  // 批量標籤操作
+  async batchTagOperation(operation: BatchTagOperation): Promise<BatchTagResult> {
+    const response = await api.post('/papers/batch-tags/', operation)
+    return response.data
   },
 
   // 文件預覽（支持Excel、CSV、TSV）

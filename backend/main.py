@@ -16,14 +16,17 @@ from schemas import (
     ComplexSearchQuery,
     ExcelImportResult,
     ExcelPreviewData,
-    ExcelImportConfig
+    ExcelImportConfig,
+    BatchTagOperation,
+    BatchTagResult
 )
 from crud import (
     create_paper, get_papers, get_paper, update_paper, delete_paper,
     create_author, get_authors,
     create_tag, get_tags,
     create_venue, get_venues,
-    search_papers, search_papers_complex
+    search_papers, search_papers_complex,
+    batch_add_tags_to_papers, batch_remove_tags_from_papers
 )
 from minio_client import upload_file, download_file, delete_file
 from excel_import import import_excel_file, preview_file, get_default_field_mappings, import_file_with_config, import_file
@@ -148,6 +151,20 @@ async def search_papers_complex_endpoint(
 ):
     """處理複雜的 AND/OR 搜索查詢"""
     return search_papers_complex(db=db, query_data=query, skip=skip, limit=limit)
+
+# 批量標籤操作端點
+@app.post("/papers/batch-tags/", response_model=BatchTagResult)
+async def batch_tag_operation(
+    operation: BatchTagOperation,
+    db: Session = Depends(get_db)
+):
+    """批量為論文添加或移除標籤"""
+    if operation.operation == "add":
+        return batch_add_tags_to_papers(db=db, paper_ids=operation.paper_ids, tag_ids=operation.tag_ids)
+    elif operation.operation == "remove":
+        return batch_remove_tags_from_papers(db=db, paper_ids=operation.paper_ids, tag_ids=operation.tag_ids)
+    else:
+        raise HTTPException(status_code=400, detail="不支持的操作類型，請使用 'add' 或 'remove'")
 
 # 文件上傳下載端點
 @app.post("/papers/{paper_id}/upload-pdf/")
