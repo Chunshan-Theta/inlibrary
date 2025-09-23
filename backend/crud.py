@@ -36,17 +36,29 @@ def create_paper(db: Session, paper: PaperCreate):
     
     # 添加作者關聯
     for i, author_id in enumerate(paper.author_ids):
-        paper_author = PaperAuthor(
-            paper_id=db_paper.id,
-            author_id=author_id,
-            author_order=i + 1
-        )
-        db.add(paper_author)
+        # 檢查是否已存在相同的關聯
+        existing_relation = db.query(PaperAuthor).filter(
+            and_(PaperAuthor.paper_id == db_paper.id, PaperAuthor.author_id == author_id)
+        ).first()
+        
+        if not existing_relation:
+            paper_author = PaperAuthor(
+                paper_id=db_paper.id,
+                author_id=author_id,
+                author_order=i + 1
+            )
+            db.add(paper_author)
     
     # 添加標籤關聯
     for tag_id in paper.tag_ids:
-        paper_tag = PaperTag(paper_id=db_paper.id, tag_id=tag_id)
-        db.add(paper_tag)
+        # 檢查是否已存在相同的關聯
+        existing_relation = db.query(PaperTag).filter(
+            and_(PaperTag.paper_id == db_paper.id, PaperTag.tag_id == tag_id)
+        ).first()
+        
+        if not existing_relation:
+            paper_tag = PaperTag(paper_id=db_paper.id, tag_id=tag_id)
+            db.add(paper_tag)
     
     db.commit()
     db.refresh(db_paper)
@@ -82,12 +94,18 @@ def update_paper(db: Session, paper_id: int, paper: PaperUpdate):
         db.query(PaperAuthor).filter(PaperAuthor.paper_id == paper_id).delete()
         # 添加新關聯
         for i, author_id in enumerate(paper.author_ids):
-            paper_author = PaperAuthor(
-                paper_id=paper_id,
-                author_id=author_id,
-                author_order=i + 1
-            )
-            db.add(paper_author)
+            # 檢查是否已存在相同的關聯（雖然上面已刪除，但為了防錯）
+            existing_relation = db.query(PaperAuthor).filter(
+                and_(PaperAuthor.paper_id == paper_id, PaperAuthor.author_id == author_id)
+            ).first()
+            
+            if not existing_relation:
+                paper_author = PaperAuthor(
+                    paper_id=paper_id,
+                    author_id=author_id,
+                    author_order=i + 1
+                )
+                db.add(paper_author)
     
     # 更新標籤關聯
     if paper.tag_ids is not None:
@@ -95,8 +113,14 @@ def update_paper(db: Session, paper_id: int, paper: PaperUpdate):
         db.query(PaperTag).filter(PaperTag.paper_id == paper_id).delete()
         # 添加新關聯
         for tag_id in paper.tag_ids:
-            paper_tag = PaperTag(paper_id=paper_id, tag_id=tag_id)
-            db.add(paper_tag)
+            # 檢查是否已存在相同的關聯（雖然上面已刪除，但為了防錯）
+            existing_relation = db.query(PaperTag).filter(
+                and_(PaperTag.paper_id == paper_id, PaperTag.tag_id == tag_id)
+            ).first()
+            
+            if not existing_relation:
+                paper_tag = PaperTag(paper_id=paper_id, tag_id=tag_id)
+                db.add(paper_tag)
     
     db.commit()
     db.refresh(db_paper)

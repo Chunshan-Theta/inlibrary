@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Boolean, DECIMAL, ARRAY
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Boolean, DECIMAL, ARRAY, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -60,6 +60,9 @@ class PaperAuthor(Base):
     author_order = Column(Integer, nullable=False)
     is_corresponding = Column(Boolean, default=False)
     
+    # 添加唯一約束
+    __table_args__ = (UniqueConstraint('paper_id', 'author_id', name='paper_authors_paper_id_author_id_key'),)
+    
     # 關聯關係
     paper = relationship("Paper", back_populates="authors")
     author = relationship("Author", back_populates="papers")
@@ -80,6 +83,9 @@ class PaperTag(Base):
     id = Column(Integer, primary_key=True, index=True)
     paper_id = Column(Integer, ForeignKey("papers.id"), nullable=False)
     tag_id = Column(Integer, ForeignKey("tags.id"), nullable=False)
+    
+    # 添加唯一約束
+    __table_args__ = (UniqueConstraint('paper_id', 'tag_id', name='paper_tags_paper_id_tag_id_key'),)
     
     # 關聯關係
     paper = relationship("Paper", back_populates="tags")

@@ -1,5 +1,6 @@
 import pandas as pd
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Dict, Any, Optional, Tuple
 import re
 import uuid
@@ -295,17 +296,32 @@ def import_file_with_config(config: ExcelImportConfig, db: Session) -> ExcelImpo
                         failed_imports += 1
                         continue
                     
-                    from crud import create_paper
-                    new_paper = create_paper(db, paper_create)
-                    imported_papers.append(new_paper)
-                    successful_imports += 1
-                    
+                    try:
+                        from crud import create_paper
+                        new_paper = create_paper(db, paper_create)
+                        imported_papers.append(new_paper)
+                        successful_imports += 1
+                    except Exception as create_error:
+                        # 如果創建失敗，回滾事務
+                        db.rollback()
+                        error_msg = str(create_error)
+                        if "duplicate key value violates unique constraint" in error_msg:
+                            if "paper_authors_paper_id_author_id_key" in error_msg:
+                                errors.append(f"行 {index + 1}: 作者關聯重複")
+                            else:
+                                errors.append(f"行 {index + 1}: 數據重複")
+                        else:
+                            errors.append(f"行 {index + 1}: 創建論文失敗 - {error_msg}")
+                        failed_imports += 1
+                        
                 else:
                     failed_imports += 1
                     for error in row_errors:
                         errors.append(f"行 {index + 1}: {error}")
                         
             except Exception as e:
+                # 如果發生任何其他錯誤，回滾事務
+                db.rollback()
                 failed_imports += 1
                 errors.append(f"行 {index + 1}: {str(e)}")
         
@@ -378,17 +394,39 @@ def extract_year_from_date(date_str: str) -> Optional[int]:
 def get_or_create_author(db: Session, author_name: str) -> Optional[Author]:
     """獲取或創建作者"""
     try:
-        # 先嘗試按名稱查找
-        author = db.query(Author).filter(Author.name == author_name).first()
+        # 清理作者名稱
+        clean_name = author_name.strip()
+        if not clean_name:
+            return None
+            
+        # 先嘗試按名稱查找（區分大小寫）
+        author = db.query(Author).filter(Author.name == clean_name).first()
+        if author:
+            return author
+        
+        # 嘗試不區分大小寫的查找
+        author = db.query(Author).filter(func.lower(Author.name) == func.lower(clean_name)).first()
         if author:
             return author
         
         # 如果不存在，創建新作者
-        from schemas import AuthorCreate
-        author_data = AuthorCreate(name=author_name)
-        return create_author(db, author_data)
+        try:
+            from schemas import AuthorCreate
+            author_data = AuthorCreate(name=clean_name)
+            new_author = create_author(db, author_data)
+            return new_author
+        except Exception as create_error:
+            # 如果創建時發生重複錯誤，再次嘗試查找（可能是併發創建）
+            if "duplicate key" in str(create_error).lower():
+                db.rollback()
+                author = db.query(Author).filter(Author.name == clean_name).first()
+                if author:
+                    return author
+            raise create_error
+            
     except Exception as e:
         print(f"創建或獲取作者 {author_name} 時出錯: {e}")
+        db.rollback()
         return None
 
 def get_or_create_venue(db: Session, venue_name: str, venue_type: str = "journal") -> Optional[Venue]:
