@@ -47,10 +47,12 @@ export default function PaperList({ searchQuery }: PaperListProps) {
       setSelectedPaperIds([])
       setShowTagModal(false)
       setNewTagName('')
+      setIsCreatingTag(false) // 重置創建標籤狀態
     },
     onError: (error: any) => {
       console.error('批量標籤操作失敗:', error)
       alert('批量標籤操作失敗，請稍後再試')
+      setIsCreatingTag(false) // 發生錯誤時也要重置狀態
     }
   })
 
@@ -117,19 +119,19 @@ export default function PaperList({ searchQuery }: PaperListProps) {
         color: randomColor 
       })
 
-      // 添加到選中的論文
-      batchTagMutation.mutate({
+      // 添加到選中的論文 - 使用 mutateAsync 等待操作完成
+      await batchTagMutation.mutateAsync({
         paper_ids: selectedPaperIds,
         tag_ids: [newTag.id],
         operation: 'add'
       })
 
     } catch (error) {
-      console.error('創建標籤失敗:', error)
-      alert('創建標籤失敗，請稍後再試')
-    } finally {
+      console.error('創建標籤或添加標籤失敗:', error)
+      alert('操作失敗，請稍後再試')
       setIsCreatingTag(false)
     }
+    // 注意：setIsCreatingTag(false) 將在 batchTagMutation 的成功回調中處理
   }
 
   const handleDownloadPdf = async (paperId: number, title: string) => {
