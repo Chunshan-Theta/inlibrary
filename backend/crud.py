@@ -36,17 +36,29 @@ def create_paper(db: Session, paper: PaperCreate):
     
     # 添加作者關聯
     for i, author_id in enumerate(paper.author_ids):
-        paper_author = PaperAuthor(
-            paper_id=db_paper.id,
-            author_id=author_id,
-            author_order=i + 1
-        )
-        db.add(paper_author)
+        # 檢查是否已存在相同的關聯
+        existing_relation = db.query(PaperAuthor).filter(
+            and_(PaperAuthor.paper_id == db_paper.id, PaperAuthor.author_id == author_id)
+        ).first()
+        
+        if not existing_relation:
+            paper_author = PaperAuthor(
+                paper_id=db_paper.id,
+                author_id=author_id,
+                author_order=i + 1
+            )
+            db.add(paper_author)
     
     # 添加標籤關聯
     for tag_id in paper.tag_ids:
-        paper_tag = PaperTag(paper_id=db_paper.id, tag_id=tag_id)
-        db.add(paper_tag)
+        # 檢查是否已存在相同的關聯
+        existing_relation = db.query(PaperTag).filter(
+            and_(PaperTag.paper_id == db_paper.id, PaperTag.tag_id == tag_id)
+        ).first()
+        
+        if not existing_relation:
+            paper_tag = PaperTag(paper_id=db_paper.id, tag_id=tag_id)
+            db.add(paper_tag)
     
     db.commit()
     db.refresh(db_paper)
@@ -82,12 +94,18 @@ def update_paper(db: Session, paper_id: int, paper: PaperUpdate):
         db.query(PaperAuthor).filter(PaperAuthor.paper_id == paper_id).delete()
         # 添加新關聯
         for i, author_id in enumerate(paper.author_ids):
-            paper_author = PaperAuthor(
-                paper_id=paper_id,
-                author_id=author_id,
-                author_order=i + 1
-            )
-            db.add(paper_author)
+            # 檢查是否已存在相同的關聯（雖然上面已刪除，但為了防錯）
+            existing_relation = db.query(PaperAuthor).filter(
+                and_(PaperAuthor.paper_id == paper_id, PaperAuthor.author_id == author_id)
+            ).first()
+            
+            if not existing_relation:
+                paper_author = PaperAuthor(
+                    paper_id=paper_id,
+                    author_id=author_id,
+                    author_order=i + 1
+                )
+                db.add(paper_author)
     
     # 更新標籤關聯
     if paper.tag_ids is not None:
@@ -95,8 +113,14 @@ def update_paper(db: Session, paper_id: int, paper: PaperUpdate):
         db.query(PaperTag).filter(PaperTag.paper_id == paper_id).delete()
         # 添加新關聯
         for tag_id in paper.tag_ids:
-            paper_tag = PaperTag(paper_id=paper_id, tag_id=tag_id)
-            db.add(paper_tag)
+            # 檢查是否已存在相同的關聯（雖然上面已刪除，但為了防錯）
+            existing_relation = db.query(PaperTag).filter(
+                and_(PaperTag.paper_id == paper_id, PaperTag.tag_id == tag_id)
+            ).first()
+            
+            if not existing_relation:
+                paper_tag = PaperTag(paper_id=paper_id, tag_id=tag_id)
+                db.add(paper_tag)
     
     db.commit()
     db.refresh(db_paper)
@@ -349,4 +373,110 @@ def get_venues(db: Session):
     return db.query(Venue).all()
 
 def get_venue(db: Session, venue_id: int):
-    return db.query(Venue).filter(Venue.id == venue_id).first() 
+    return db.query(Venue).filter(Venue.id == venue_id).first()
+
+# 批量標籤操作
+def batch_add_tags_to_papers(db: Session, paper_ids: List[int], tag_ids: List[int]):
+    """批量為論文添加標籤"""
+    from schemas import BatchTagResult
+    
+    success_count = 0
+    error_count = 0
+    updated_paper_ids = []
+    errors = []
+    
+    try:
+        # 驗證論文存在
+        existing_papers = db.query(Paper.id).filter(Paper.id.in_(paper_ids)).all()
+        existing_paper_ids = [p.id for p in existing_papers]
+        
+        # 驗證標籤存在
+        existing_tags = db.query(Tag.id).filter(Tag.id.in_(tag_ids)).all()
+        existing_tag_ids = [t.id for t in existing_tags]
+        
+        if not existing_tag_ids:
+            errors.append("沒有找到有效的標籤")
+            return BatchTagResult(
+                success_count=0,
+                error_count=len(paper_ids),
+                updated_paper_ids=[],
+                errors=errors
+            )
+        
+        for paper_id in existing_paper_ids:
+            try:
+                for tag_id in existing_tag_ids:
+                    # 檢查關聯是否已存在
+                    existing_relation = db.query(PaperTag).filter(
+                        PaperTag.paper_id == paper_id,
+                        PaperTag.tag_id == tag_id
+                    ).first()
+                    
+                    if not existing_relation:
+                        paper_tag = PaperTag(paper_id=paper_id, tag_id=tag_id)
+                        db.add(paper_tag)
+                
+                success_count += 1
+                updated_paper_ids.append(paper_id)
+                
+            except Exception as e:
+                error_count += 1
+                errors.append(f"論文 {paper_id} 添加標籤失敗: {str(e)}")
+        
+        db.commit()
+        
+    except Exception as e:
+        db.rollback()
+        errors.append(f"批量操作失敗: {str(e)}")
+        error_count = len(paper_ids)
+        success_count = 0
+        updated_paper_ids = []
+    
+    return BatchTagResult(
+        success_count=success_count,
+        error_count=error_count,
+        updated_paper_ids=updated_paper_ids,
+        errors=errors
+    )
+
+def batch_remove_tags_from_papers(db: Session, paper_ids: List[int], tag_ids: List[int]):
+    """批量從論文中移除標籤"""
+    from schemas import BatchTagResult
+    
+    success_count = 0
+    error_count = 0
+    updated_paper_ids = []
+    errors = []
+    
+    try:
+        for paper_id in paper_ids:
+            try:
+                # 刪除指定的標籤關聯
+                deleted_count = db.query(PaperTag).filter(
+                    PaperTag.paper_id == paper_id,
+                    PaperTag.tag_id.in_(tag_ids)
+                ).delete(synchronize_session=False)
+                
+                if deleted_count > 0:
+                    success_count += 1
+                    updated_paper_ids.append(paper_id)
+                
+            except Exception as e:
+                error_count += 1
+                errors.append(f"論文 {paper_id} 移除標籤失敗: {str(e)}")
+        
+        db.commit()
+        
+    except Exception as e:
+        db.rollback()
+        errors.append(f"批量操作失敗: {str(e)}")
+        error_count = len(paper_ids)
+        success_count = 0
+        updated_paper_ids = []
+    
+    return BatchTagResult(
+        success_count=success_count,
+        error_count=error_count,
+        updated_paper_ids=updated_paper_ids,
+        errors=errors
+    ) 

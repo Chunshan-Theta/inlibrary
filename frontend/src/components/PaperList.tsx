@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { useQuery } from 'react-query'
-import { papersApi } from '../api/papers'
-import { ComplexSearchQuery, Paper } from '../types'
-import { DocumentTextIcon, ArrowDownTrayIcon, EyeIcon } from '@heroicons/react/24/outline'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { papersApi, tagsApi } from '../api/papers'
+import { ComplexSearchQuery, Paper, Tag } from '../types'
+import { DocumentTextIcon, ArrowDownTrayIcon, EyeIcon, TagIcon, PlusIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
 interface PaperListProps {
@@ -11,6 +11,13 @@ interface PaperListProps {
 
 export default function PaperList({ searchQuery }: PaperListProps) {
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null)
+  const [selectedPaperIds, setSelectedPaperIds] = useState<number[]>([])
+  const [showBatchActions, setShowBatchActions] = useState(false)
+  const [showTagModal, setShowTagModal] = useState(false)
+  const [newTagName, setNewTagName] = useState('')
+  const [isCreatingTag, setIsCreatingTag] = useState(false)
+
+  const queryClient = useQueryClient()
 
   // 判斷是否有搜索條件
   const hasQuery = searchQuery !== null
@@ -25,6 +32,107 @@ export default function PaperList({ searchQuery }: PaperListProps) {
       enabled: true,
     }
   )
+
+  // 獲取標籤數據
+  const { data: tags } = useQuery('tags', tagsApi.getTags)
+
+  // 批量標籤操作 mutation
+  const batchTagMutation = useMutation(papersApi.batchTagOperation, {
+    onSuccess: (result) => {
+      // 重新獲取論文數據
+      queryClient.invalidateQueries(['papers'])
+      // 顯示成功消息
+      alert(`成功更新 ${result.success_count} 篇論文的標籤`)
+      // 清空選中
+      setSelectedPaperIds([])
+      setShowTagModal(false)
+      setNewTagName('')
+      setIsCreatingTag(false) // 重置創建標籤狀態
+    },
+    onError: (error: any) => {
+      console.error('批量標籤操作失敗:', error)
+      alert('批量標籤操作失敗，請稍後再試')
+      setIsCreatingTag(false) // 發生錯誤時也要重置狀態
+    }
+  })
+
+  // 創建標籤 mutation
+  const createTagMutation = useMutation(tagsApi.createTag, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tags')
+    }
+  })
+
+  // 全選/取消全選
+  const handleSelectAll = () => {
+    if (selectedPaperIds.length === papers?.length) {
+      setSelectedPaperIds([])
+    } else {
+      setSelectedPaperIds(papers?.map(p => p.id) || [])
+    }
+  }
+
+  // 選中/取消選中單個論文
+  const handleSelectPaper = (paperId: number) => {
+    setSelectedPaperIds(prev => 
+      prev.includes(paperId) 
+        ? prev.filter(id => id !== paperId)
+        : [...prev, paperId]
+    )
+  }
+
+  // 批量添加現有標籤
+  const handleBatchAddTag = (tagId: number) => {
+    if (selectedPaperIds.length === 0) {
+      alert('請先選擇論文')
+      return
+    }
+
+    batchTagMutation.mutate({
+      paper_ids: selectedPaperIds,
+      tag_ids: [tagId],
+      operation: 'add'
+    })
+  }
+
+  // 批量創建並添加新標籤
+  const handleCreateAndAddTag = async () => {
+    if (!newTagName.trim()) {
+      alert('請輸入標籤名稱')
+      return
+    }
+
+    if (selectedPaperIds.length === 0) {
+      alert('請先選擇論文')
+      return
+    }
+
+    setIsCreatingTag(true)
+    try {
+      // 生成隨機顏色
+      const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#F97316', '#06B6D4', '#84CC16']
+      const randomColor = colors[Math.floor(Math.random() * colors.length)]
+      
+      // 創建標籤
+      const newTag = await createTagMutation.mutateAsync({ 
+        name: newTagName.trim(), 
+        color: randomColor 
+      })
+
+      // 添加到選中的論文 - 使用 mutateAsync 等待操作完成
+      await batchTagMutation.mutateAsync({
+        paper_ids: selectedPaperIds,
+        tag_ids: [newTag.id],
+        operation: 'add'
+      })
+
+    } catch (error) {
+      console.error('創建標籤或添加標籤失敗:', error)
+      alert('操作失敗，請稍後再試')
+      setIsCreatingTag(false)
+    }
+    // 注意：setIsCreatingTag(false) 將在 batchTagMutation 的成功回調中處理
+  }
 
   const handleDownloadPdf = async (paperId: number, title: string) => {
     try {
@@ -80,9 +188,66 @@ export default function PaperList({ searchQuery }: PaperListProps) {
 
   return (
     <div className="space-y-4">
-      {papers.map((paper) => (
+      {/* 批量操作工具栏 */}
+      {papers && papers.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={selectedPaperIds.length === papers.length && papers.length > 0}
+                  onChange={handleSelectAll}
+                  className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  全選 ({selectedPaperIds.length}/{papers.length})
+                </span>
+              </label>
+              
+              {selectedPaperIds.length > 0 && (
+                <span className="text-sm text-blue-600">
+                  已選中 {selectedPaperIds.length} 篇論文
+                </span>
+              )}
+            </div>
+
+            {selectedPaperIds.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowTagModal(true)}
+                  className="inline-flex items-center px-3 py-1 text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md transition-colors"
+                >
+                  <TagIcon className="h-4 w-4 mr-1" />
+                  添加標籤
+                </button>
+                <button
+                  onClick={() => setSelectedPaperIds([])}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  取消選擇
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 論文列表 */}
+      {papers && papers.map((paper) => (
         <div key={paper.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start">
+          <div className="flex items-start space-x-4">
+            {/* 複選框 */}
+            <div className="flex-shrink-0 mt-1">
+              <input
+                type="checkbox"
+                checked={selectedPaperIds.includes(paper.id)}
+                onChange={() => handleSelectPaper(paper.id)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* 論文內容 */}
             <div className="flex-1">
               {/* 標題 */}
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -149,7 +314,7 @@ export default function PaperList({ searchQuery }: PaperListProps) {
             </div>
 
             {/* 操作按鈕 */}
-            <div className="flex flex-col space-y-2 ml-4">
+            <div className="flex flex-col space-y-2">
               <button
                 onClick={() => setSelectedPaper(paper)}
                 className="flex items-center space-x-1 text-sm text-primary-600 hover:text-primary-700"
@@ -160,7 +325,7 @@ export default function PaperList({ searchQuery }: PaperListProps) {
               
               {paper.url && (
                 <a
-                  href={paper.url}
+                  href={paper.url.startsWith('http') ? paper.url : `https://www.google.com/search?q=${paper.url}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-700"
@@ -190,6 +355,86 @@ export default function PaperList({ searchQuery }: PaperListProps) {
           </div>
         </div>
       ))}
+
+      {/* 批量標籤操作彈窗 */}
+      {showTagModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  為 {selectedPaperIds.length} 篇論文添加標籤
+                </h3>
+                <button
+                  onClick={() => setShowTagModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* 現有標籤列表 */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">選擇現有標籤:</h4>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                  {tags?.map((tag) => (
+                    <button
+                      key={tag.id}
+                      onClick={() => handleBatchAddTag(tag.id)}
+                      disabled={batchTagMutation.isLoading}
+                      className="flex items-center justify-between p-2 text-left border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <span
+                        className="text-xs px-2 py-1 rounded text-white flex-shrink-0"
+                        style={{ backgroundColor: tag.color }}
+                      >
+                        {tag.name}
+                      </span>
+                      <PlusIcon className="h-4 w-4 text-gray-400" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 創建新標籤 */}
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">創建新標籤:</h4>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={newTagName}
+                    onChange={(e) => setNewTagName(e.target.value)}
+                    placeholder="輸入新標籤名稱..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleCreateAndAddTag()
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleCreateAndAddTag}
+                    disabled={!newTagName.trim() || isCreatingTag || batchTagMutation.isLoading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isCreatingTag ? '創建中...' : '創建並添加'}
+                  </button>
+                </div>
+              </div>
+
+              {/* 操作按鈕 */}
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowTagModal(false)}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 論文詳情彈窗 */}
       {selectedPaper && (

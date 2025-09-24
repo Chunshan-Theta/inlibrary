@@ -130,6 +130,18 @@ class ComplexSearchQuery(BaseModel):
 # 需要更新 FilterGroup 的前向引用
 FilterGroup.model_rebuild()
 
+# 批量操作 schemas
+class BatchTagOperation(BaseModel):
+    paper_ids: List[int]
+    tag_ids: List[int]
+    operation: str  # 'add' 或 'remove'
+
+class BatchTagResult(BaseModel):
+    success_count: int
+    error_count: int
+    updated_paper_ids: List[int]
+    errors: List[str]
+
 # File import schemas
 class FileColumnInfo(BaseModel):
     name: str

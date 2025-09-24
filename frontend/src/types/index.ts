@@ -148,4 +148,18 @@ export interface ExcelImportResult {
   failed_imports: number
   errors: string[]
   imported_papers: Paper[]
+}
+
+// 批量操作相關類型
+export interface BatchTagOperation {
+  paper_ids: number[]
+  tag_ids: number[]
+  operation: 'add' | 'remove'
+}
+
+export interface BatchTagResult {
+  success_count: number
+  error_count: number
+  updated_paper_ids: number[]
+  errors: string[]
 } 
