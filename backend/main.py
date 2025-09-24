@@ -76,7 +76,7 @@ async def create_paper_endpoint(paper: PaperCreate, db: Session = Depends(get_db
 @app.get("/papers/", response_model=List[PaperResponse])
 async def read_papers(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 10000,  # 提高默认限制以获取所有论文
     db: Session = Depends(get_db)
 ):
     """獲取論文列表"""

@@ -8,7 +8,7 @@ const api = axios.create({
 // 論文相關 API
 export const papersApi = {
   // 獲取論文列表
-  async getPapers(skip = 0, limit = 100): Promise<Paper[]> {
+  async getPapers(skip = 0, limit = 10000): Promise<Paper[]> {
     const response = await api.get(`/papers/?skip=${skip}&limit=${limit}`)
     return response.data
   },

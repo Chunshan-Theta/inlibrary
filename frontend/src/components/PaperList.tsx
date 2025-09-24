@@ -325,7 +325,7 @@ export default function PaperList({ searchQuery }: PaperListProps) {
               
               {paper.url && (
                 <a
-                  href={paper.url}
+                  href={paper.url.startsWith('http') ? paper.url : `https://www.google.com/search?q=${paper.url}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-700"
