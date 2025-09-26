@@ -190,4 +190,27 @@ export const venuesApi = {
     const response = await api.post('/venues/', venue)
     return response.data
   },
+}
+
+// 聊天相關 API
+export const chatApi = {
+  async sendMessage(message: string, sessionId?: string): Promise<{ response: string; message?: string }> {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message,
+        sessionId: sessionId || 'default-session'
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      throw new Error(`Failed to send message: ${errorData.error || response.statusText}`)
+    }
+
+    return await response.json()
+  },
 } 

@@ -12,6 +12,7 @@ export default function Layout({ children }: LayoutProps) {
   const navItems = [
     { name: '首頁', href: '/', icon: '🏠' },
     { name: '標籤瀏覽', href: '/tags', icon: '🏷️' },
+    { name: 'AI 助手', href: '/chat', icon: '🤖' },
   ]
 
   return (

@@ -3,9 +3,9 @@ services:
     image: postgres:15
     container_name: research_postgres
     environment:
-      POSTGRES_DB: research_papers
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: ${POSTGRES_DB:-research_papers}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password123}
     ports:
       - "5432:5432"
     volumes:
@@ -24,8 +24,8 @@ services:
     container_name: research_minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -43,12 +43,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_N8N_CHAT_URL=${NEXT_PUBLIC_N8N_CHAT_URL}
     container_name: research_fastmcp
     environment:
-      DATABASE_URL: postgresql://admin:password123@postgres:5432/research_papers
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin123
+      DATABASE_URL: ${DATABASE_URL:-postgresql://admin:password123@postgres:5432/research_papers}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
     ports:
       - "8000:8000"
     depends_on:
@@ -65,7 +67,8 @@ services:
       dockerfile: Dockerfile
     container_name: research_frontend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_N8N_CHAT_URL: ${NEXT_PUBLIC_N8N_CHAT_URL}
     ports:
       - "3000:3000"
     depends_on:
