@@ -14,17 +14,33 @@ export default function TagsPage() {
   // 獲取所有標籤
   const { data: tags, isLoading: tagsLoading } = useQuery('tags', tagsApi.getTags)
 
-  // 獲取所有論文
-  const { data: allPapers, isLoading: papersLoading } = useQuery('papers', () => papersApi.getPapers())
-
-  // 根據選中的標籤篩選論文
-  const filteredPapers = selectedTagId 
-    ? allPapers?.filter(paper => 
-        paper.tags.some(paperTag => paperTag.tag.id === selectedTagId)
-      ) || []
-    : allPapers || []
-
+  // 根據選中的標籤獲取論文數據
   const selectedTag = tags?.find(tag => tag.id === selectedTagId)
+  
+  // 獲取論文數據 - 如果選中標籤則搜索，否則獲取所有論文
+  const { data: papers, isLoading: papersLoading, refetch: refetchPapers } = useQuery(
+    ['papers', selectedTagId], 
+    () => {
+      if (selectedTagId && selectedTag) {
+        // 使用標籤搜索
+        return papersApi.searchPapers({ tags: [selectedTag.name] }, 0, 1000)
+      } else {
+        // 獲取所有論文
+        return papersApi.getPapers()
+      }
+    },
+    {
+      staleTime: 0, // 每次都重新獲取
+    }
+  )
+
+  const filteredPapers = papers || []
+
+  // 处理标签选择
+  const handleTagSelect = (tagId: number | null) => {
+    setSelectedTagId(tagId)
+    // 设置标签后会自动触发 useQuery 的重新获取，因为依赖项 selectedTagId 改变了
+  }
 
   const handleDownloadPdf = async (paperId: number, title: string) => {
     try {
@@ -83,7 +99,7 @@ export default function TagsPage() {
                 
                 {/* 全部論文選項 */}
                 <button
-                  onClick={() => setSelectedTagId(null)}
+                  onClick={() => handleTagSelect(null)}
                   className={`w-full text-left px-3 py-2 rounded-lg mb-2 transition-colors ${
                     selectedTagId === null
                       ? 'bg-blue-100 text-blue-700 border border-blue-300'
@@ -102,7 +118,7 @@ export default function TagsPage() {
                       key={tag.id}
                       tag={tag}
                       selectedTagId={selectedTagId}
-                      onTagSelect={setSelectedTagId}
+                      onTagSelect={handleTagSelect}
                     />
                   ))}
                 </div>
@@ -153,7 +169,7 @@ export default function TagsPage() {
               {/* 論文列表或統計信息 */}
               {selectedTagId === null ? (
                 /* 顯示全部論文的統計信息 */
-                <StatisticsView papers={allPapers || []} onTagSelect={setSelectedTagId} />
+                <StatisticsView papers={papers || []} onTagSelect={handleTagSelect} />
               ) : (
                 /* 顯示篩選後的論文列表 */
                 filteredPapers.length > 0 ? (
@@ -204,7 +220,7 @@ export default function TagsPage() {
                                 {paper.tags.map((paperTag) => (
                                   <button
                                     key={paperTag.tag.id}
-                                    onClick={() => setSelectedTagId(paperTag.tag.id)}
+                                    onClick={() => handleTagSelect(paperTag.tag.id)}
                                     className={`text-xs px-2 py-1 rounded text-white transition-opacity ${
                                       selectedTagId === paperTag.tag.id 
                                         ? 'ring-2 ring-offset-1 ring-blue-400' 
@@ -484,7 +500,7 @@ function PaperDetailModal({ paper, onClose }: PaperDetailModalProps) {
 interface TagItemProps {
   tag: Tag
   selectedTagId: number | null
-  onTagSelect: (tagId: number) => void
+  onTagSelect: (tagId: number | null) => void
 }
 
 function TagItem({ tag, selectedTagId, onTagSelect }: TagItemProps) {
@@ -526,7 +542,7 @@ function TagItem({ tag, selectedTagId, onTagSelect }: TagItemProps) {
 // 統計視圖組件
 interface StatisticsViewProps {
   papers: Paper[]
-  onTagSelect: (tagId: number) => void
+  onTagSelect: (tagId: number | null) => void
 }
 
 function StatisticsView({ papers, onTagSelect }: StatisticsViewProps) {
@@ -666,7 +682,7 @@ function StatisticsView({ papers, onTagSelect }: StatisticsViewProps) {
 
         {/* 標籤分布 */}
         <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">熱門標籤 (前10名)</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">熱門標籤 (前5名)</h3>
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {sortedTags.map(([tagName, data]) => (
               <div key={tagName} className="border-b border-gray-100 pb-2">
