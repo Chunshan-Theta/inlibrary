@@ -78,6 +78,14 @@ def get_paper(db: Session, paper_id: int):
         joinedload(Paper.tags).joinedload(PaperTag.tag)
     ).filter(Paper.id == paper_id).first()
 
+def count_all_papers(db: Session) -> int:
+    """計算所有論文的總數"""
+    return db.query(Paper).count()
+
+def count_papers_with_tag(db: Session, tag_name: str) -> int:
+    """計算具有特定標籤的論文數量"""
+    return db.query(Paper).join(PaperTag).join(Tag).filter(Tag.name == tag_name).count()
+
 def update_paper(db: Session, paper_id: int, paper: PaperUpdate):
     db_paper = db.query(Paper).filter(Paper.id == paper_id).first()
     if not db_paper:

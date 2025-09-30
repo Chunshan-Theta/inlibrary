@@ -92,44 +92,19 @@ export default function TagsPage() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium">全部論文</span>
-                    <span className="text-sm text-gray-500">
-                      {allPapers?.length || 0}
-                    </span>
                   </div>
                 </button>
 
                 {/* 標籤列表 */}
                 <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {tags?.map((tag) => {
-                    const paperCount = allPapers?.filter(paper => 
-                      paper.tags.some(paperTag => paperTag.tag.id === tag.id)
-                    ).length || 0
-
-                    return (
-                      <button
-                        key={tag.id}
-                        onClick={() => setSelectedTagId(tag.id)}
-                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                          selectedTagId === tag.id
-                            ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                            : 'hover:bg-gray-100 border border-transparent'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <span
-                              className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
-                              style={{ backgroundColor: tag.color }}
-                            ></span>
-                            <span className="font-medium truncate">{tag.name}</span>
-                          </div>
-                          <span className="text-sm text-gray-500 ml-2">
-                            {paperCount}
-                          </span>
-                        </div>
-                      </button>
-                    )
-                  })}
+                  {tags?.map((tag) => (
+                    <TagItem 
+                      key={tag.id}
+                      tag={tag}
+                      selectedTagId={selectedTagId}
+                      onTagSelect={setSelectedTagId}
+                    />
+                  ))}
                 </div>
 
                 {tags?.length === 0 && (
@@ -178,7 +153,7 @@ export default function TagsPage() {
               {/* 論文列表或統計信息 */}
               {selectedTagId === null ? (
                 /* 顯示全部論文的統計信息 */
-                <StatisticsView papers={allPapers || []} />
+                <StatisticsView papers={allPapers || []} onTagSelect={setSelectedTagId} />
               ) : (
                 /* 顯示篩選後的論文列表 */
                 filteredPapers.length > 0 ? (
@@ -505,14 +480,59 @@ function PaperDetailModal({ paper, onClose }: PaperDetailModalProps) {
   )
 }
 
+// TagItem組件
+interface TagItemProps {
+  tag: Tag
+  selectedTagId: number | null
+  onTagSelect: (tagId: number) => void
+}
+
+function TagItem({ tag, selectedTagId, onTagSelect }: TagItemProps) {
+  const { data: countData } = useQuery(
+    ['tag-count', tag.name], 
+    () => papersApi.getPapersCountByTag(tag.name),
+    {
+      staleTime: 5 * 60 * 1000, // 5分鐘內不重新請求
+    }
+  )
+
+  const paperCount = countData?.count || 0
+
+  return (
+    <button
+      onClick={() => onTagSelect(tag.id)}
+      className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+        selectedTagId === tag.id
+          ? 'bg-blue-100 text-blue-700 border border-blue-300'
+          : 'hover:bg-gray-100 border border-transparent'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <span
+            className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
+            style={{ backgroundColor: tag.color }}
+          ></span>
+          <span className="font-medium truncate">{tag.name}</span>
+        </div>
+        <span className="text-sm text-gray-500 ml-2">
+          {paperCount}
+        </span>
+      </div>
+    </button>
+  )
+}
+
 // 統計視圖組件
 interface StatisticsViewProps {
   papers: Paper[]
+  onTagSelect: (tagId: number) => void
 }
 
-function StatisticsView({ papers }: StatisticsViewProps) {
-  // 計算統計數據
-  const totalPapers = papers.length
+function StatisticsView({ papers, onTagSelect }: StatisticsViewProps) {
+  // 獲取論文總數
+  const { data: totalPapersData } = useQuery('papers-count', papersApi.getPapersCount)
+  const totalPapers = totalPapersData?.count || 0
   
   // 按年份統計
   const yearStats = papers.reduce((acc, paper) => {
@@ -644,6 +664,42 @@ function StatisticsView({ papers }: StatisticsViewProps) {
           </div>
         </div>
 
+        {/* 標籤分布 */}
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">熱門標籤 (前10名)</h3>
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {sortedTags.map(([tagName, data]) => (
+              <div key={tagName} className="border-b border-gray-100 pb-2">
+                <div className="flex items-center justify-between">
+                  <button
+                    className="flex-1 min-w-0 text-left hover:bg-gray-50 p-2 rounded transition-colors"
+                    onClick={() => {
+                      // 簡單的查找標籤ID的方法 - 在這裡我們需要一個更好的方法
+                      // 暫時使用papers中的標籤信息
+                      const allTagsInPapers: any[] = []
+                      papers.forEach((p: any) => {
+                        p.tags.forEach((pt: any) => allTagsInPapers.push(pt.tag))
+                      })
+                      const targetTag = allTagsInPapers.find((tag: any) => tag.name === tagName)
+                      if (targetTag) {
+                        onTagSelect(targetTag.id)
+                      }
+                    }}
+                  >
+                    <div className="flex items-center">
+                      <span
+                        className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
+                        style={{ backgroundColor: data.color }}
+                      ></span>
+                      <span className="text-sm font-medium text-gray-900 truncate">{tagName}</span>
+                    </div>
+                  </button>
+                  <span className="text-sm font-semibold text-gray-600 ml-2">{data.count} 篇</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         
       </div>
     </div>

@@ -8,7 +8,7 @@ const api = axios.create({
 // 論文相關 API
 export const papersApi = {
   // 獲取論文列表
-  async getPapers(skip = 0, limit = 10000): Promise<Paper[]> {
+  async getPapers(skip = 0, limit = 1000): Promise<Paper[]> {
     const response = await api.get(`/papers/?skip=${skip}&limit=${limit}`)
     return response.data
   },
@@ -85,6 +85,18 @@ export const papersApi = {
   // 批量標籤操作
   async batchTagOperation(operation: BatchTagOperation): Promise<BatchTagResult> {
     const response = await api.post('/papers/batch-tags/', operation)
+    return response.data
+  },
+
+  // 獲取論文總數
+  async getPapersCount(): Promise<{ count: number }> {
+    const response = await api.get('/papers/count/')
+    return response.data
+  },
+
+  // 獲取特定標籤的論文數量
+  async getPapersCountByTag(tagName: string): Promise<{ tag_name: string; count: number }> {
+    const response = await api.get(`/papers/count-by-tag/${encodeURIComponent(tagName)}`)
     return response.data
   },
 

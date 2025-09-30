@@ -26,7 +26,8 @@ from crud import (
     create_tag, get_tags,
     create_venue, get_venues,
     search_papers, search_papers_complex,
-    batch_add_tags_to_papers, batch_remove_tags_from_papers
+    batch_add_tags_to_papers, batch_remove_tags_from_papers,
+    count_all_papers, count_papers_with_tag
 )
 from minio_client import upload_file, download_file, delete_file
 from excel_import import import_excel_file, preview_file, get_default_field_mappings, import_file_with_config, import_file
@@ -76,7 +77,7 @@ async def create_paper_endpoint(paper: PaperCreate, db: Session = Depends(get_db
 @app.get("/papers/", response_model=List[PaperResponse])
 async def read_papers(
     skip: int = 0,
-    limit: int = 10000,  # 提高默认限制以获取所有论文
+    limit: int = 1000,  # 提高默认限制以获取所有论文
     db: Session = Depends(get_db)
 ):
     """獲取論文列表"""
@@ -165,6 +166,19 @@ async def batch_tag_operation(
         return batch_remove_tags_from_papers(db=db, paper_ids=operation.paper_ids, tag_ids=operation.tag_ids)
     else:
         raise HTTPException(status_code=400, detail="不支持的操作類型，請使用 'add' 或 'remove'")
+
+# 論文計數端點
+@app.get("/papers/count/")
+async def count_papers(db: Session = Depends(get_db)):
+    """獲取所有論文的總數量"""
+    count = count_all_papers(db)
+    return {"count": count}
+
+@app.get("/papers/count-by-tag/{tag_name}")
+async def count_papers_by_tag(tag_name: str, db: Session = Depends(get_db)):
+    """獲取具有特定標籤的論文數量"""
+    count = count_papers_with_tag(db, tag_name)
+    return {"tag_name": tag_name, "count": count}
 
 # 文件上傳下載端點
 @app.post("/papers/{paper_id}/upload-pdf/")
