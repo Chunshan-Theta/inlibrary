@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useQuery } from 'react-query'
 import Head from 'next/head'
 import Layout from '../components/Layout'
@@ -13,6 +13,10 @@ export default function TagsPage() {
 
   // 獲取所有標籤
   const { data: tags, isLoading: tagsLoading } = useQuery('tags', tagsApi.getTags)
+  
+  // 獲取論文總數
+  const { data: totalPapersData } = useQuery('papers-count', papersApi.getPapersCount)
+  const totalPapers = totalPapersData?.count || 0
 
   // 根據選中的標籤獲取論文數據
   const selectedTag = tags?.find(tag => tag.id === selectedTagId)
@@ -158,7 +162,7 @@ export default function TagsPage() {
                     )}
                     <p className="text-gray-600 mt-1">
                       {selectedTagId === null 
-                        ? `數據統計分析 - 總共 ${filteredPapers.length} 篇論文`
+                        ? `數據統計分析 - 總共 ${totalPapers} 篇論文`
                         : `找到 ${filteredPapers.length} 篇論文`
                       }
                     </p>
@@ -550,56 +554,46 @@ function StatisticsView({ papers, onTagSelect }: StatisticsViewProps) {
   const { data: totalPapersData } = useQuery('papers-count', papersApi.getPapersCount)
   const totalPapers = totalPapersData?.count || 0
   
-  // 按年份統計
-  const yearStats = papers.reduce((acc, paper) => {
-    const year = paper.publication_year
-    acc[year] = (acc[year] || 0) + 1
-    return acc
-  }, {} as Record<number, number>)
-  
-  // 按期刊/會議統計
-  const venueStats = papers.reduce((acc, paper) => {
-    if (paper.venue) {
-      const venueName = paper.venue.name
-      if (!acc[venueName]) {
-        acc[venueName] = {
-          count: 0,
-          type: paper.venue.type,
-          impact_factor: paper.venue.impact_factor
-        }
+  //年份分布、期刊/會議分布、標籤分布數據 (後端回傳為陣列）
+  const [yearStats, setYearStats] = useState<{ year: number; count: number }[]>([])
+  const [venueStats, setVenueStats] = useState<  { name: string; type: string; impact_factor?: number; count: number }[]>([])
+  const [tagStats, setTagStats] = useState<{ id?: number; name: string; color: string; count: number }[]>([])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function fetchStats() {
+      try {
+        const [years, venues, tags] = await Promise.all([
+          papersApi.getYearDistribution(),
+          papersApi.getVenueDistribution(),
+          papersApi.getTagDistribution(),
+        ])
+
+        if (!mounted) return
+
+        // 後端回傳的是陣列，直接設陣列
+        setYearStats(Array.isArray(years) ? years : [])
+        setVenueStats(Array.isArray(venues) ? venues : [])
+        setTagStats(Array.isArray(tags) ? tags : [])
+      } catch (err) {
+        console.error('載入統計資料失敗', err)
       }
-      acc[venueName].count += 1
     }
-    return acc
-  }, {} as Record<string, { count: number; type: string; impact_factor?: number }>)
+
+    fetchStats()
+    return () => { mounted = false }
+  }, [])
   
-  // 按標籤統計
-  const tagStats = papers.reduce((acc, paper) => {
-    paper.tags.forEach(paperTag => {
-      const tagName = paperTag.tag.name
-      if (!acc[tagName]) {
-        acc[tagName] = {
-          count: 0,
-          color: paperTag.tag.color
-        }
-      }
-      acc[tagName].count += 1
-    })
-    return acc
-  }, {} as Record<string, { count: number; color: string }>)
-  
-  // 排序統計數據
-  const sortedYears = Object.entries(yearStats)
-    .sort(([a], [b]) => parseInt(b) - parseInt(a))
-    .slice(0, 10)
-  
-  const sortedVenues = Object.entries(venueStats)
-    .sort(([, a], [, b]) => b.count - a.count)
-    .slice(0, 15)
-  
-  const sortedTags = Object.entries(tagStats)
-    .sort(([, a], [, b]) => b.count - a.count)
-    .slice(0, 10)
+  // 排序統計數據（年份由大到小）
+  const sortedYears = [...yearStats].sort((a, b) => (b.year || 0) - (a.year || 0))
+
+  // 期刊與標籤直接複製陣列（後端已回傳 top N）
+  const sortedVenues = [...venueStats]
+  const sortedTags = [...tagStats]
+
+  // 計算年份最大值，避免空陣列造成 Math.max 錯誤
+  const maxYearCount = yearStats.length > 0 ? Math.max(...yearStats.map(y => y.count)) : 1
   
   // 計算總引用數
   // const totalCitations = papers.reduce((sum, paper) => sum + paper.citation_count, 0)
@@ -616,17 +610,9 @@ function StatisticsView({ papers, onTagSelect }: StatisticsViewProps) {
           <div className="text-sm text-blue-700">總論文數</div>
         </div>
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="text-2xl font-bold text-green-600">{Object.keys(venueStats).length}</div>
+          <div className="text-2xl font-bold text-green-600">{venueStats.length}</div>
           <div className="text-sm text-green-700">期刊/會議數</div>
         </div>
-        {/* <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-          <div className="text-2xl font-bold text-purple-600">{totalCitations}</div>
-          <div className="text-sm text-purple-700">總引用數</div>
-        </div>
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-          <div className="text-2xl font-bold text-orange-600">{averageCitations}</div>
-          <div className="text-sm text-orange-700">平均引用數</div>
-        </div> */}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -634,18 +620,19 @@ function StatisticsView({ papers, onTagSelect }: StatisticsViewProps) {
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">年份分布</h3>
           <div className="space-y-2">
-            {sortedYears.map(([year, count]) => (
-              <div key={year} className="flex items-center justify-between">
+            {sortedYears.map(({ year, count }) => (
+              <div key={String(year)} className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">{year} 年</span>
                 <div className="flex items-center">
                   <div 
                     className="bg-blue-200 h-4 rounded mr-2"
-                    style={{ width: `${Math.max((count / Math.max(...Object.values(yearStats))) * 100, 10)}px` }}
+                    style={{ width: `${Math.max((count / maxYearCount) * 100, 5)}px` }}
                   ></div>
                   <span className="text-sm text-gray-600">{count} 篇</span>
                 </div>
               </div>
             ))}
+            {sortedYears.length === 0 && <div className="text-sm text-gray-500">無年份資料</div>}
           </div>
         </div>
 
@@ -653,30 +640,23 @@ function StatisticsView({ papers, onTagSelect }: StatisticsViewProps) {
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">期刊/會議分布 (前15名)</h3>
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {sortedVenues.map(([venue, data]) => (
-              <div key={venue} className="border-b border-gray-100 pb-2">
+            {sortedVenues.map((v) => (
+              <div key={v.name} className="border-b border-gray-100 pb-2">
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{venue}</div>
+                    <div className="text-sm font-medium text-gray-900 truncate">{v.name}</div>
                     <div className="flex items-center mt-1">
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        data.type === 'journal' 
-                          ? 'bg-blue-100 text-blue-700' 
-                          : 'bg-green-100 text-green-700'
-                      }`}>
-                        {data.type === 'journal' ? '期刊' : '會議'}
+                      <span className={`text-xs px-2 py-1 rounded ${v.type === 'journal' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                        {v.type === 'journal' ? '期刊' : '會議'}
                       </span>
-                      {data.impact_factor && (
-                        <span className="ml-2 text-xs text-gray-500">
-                          IF: {data.impact_factor}
-                        </span>
-                      )}
+                      {v.impact_factor && <span className="ml-2 text-xs text-gray-500">IF: {v.impact_factor}</span>}
                     </div>
                   </div>
-                  <span className="text-sm font-semibold text-gray-600 ml-2">{data.count} 篇</span>
+                  <span className="text-sm font-semibold text-gray-600 ml-2">{v.count} 篇</span>
                 </div>
               </div>
             ))}
+            {sortedVenues.length === 0 && <div className="text-sm text-gray-500">無期刊/會議資料</div>}
           </div>
         </div>
 
@@ -684,36 +664,35 @@ function StatisticsView({ papers, onTagSelect }: StatisticsViewProps) {
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">熱門標籤 (前5名)</h3>
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {sortedTags.map(([tagName, data]) => (
-              <div key={tagName} className="border-b border-gray-100 pb-2">
+            {sortedTags.map((t) => (
+              <div key={t.name} className="border-b border-gray-100 pb-2">
                 <div className="flex items-center justify-between">
                   <button
                     className="flex-1 min-w-0 text-left hover:bg-gray-50 p-2 rounded transition-colors"
                     onClick={() => {
-                      // 簡單的查找標籤ID的方法 - 在這裡我們需要一個更好的方法
-                      // 暫時使用papers中的標籤信息
+                      if (t.id) {
+                        onTagSelect(t.id)
+                        return
+                      }
+                      // fallback: 從 papers 裡找 id（舊有資料情況）
                       const allTagsInPapers: any[] = []
                       papers.forEach((p: any) => {
-                        p.tags.forEach((pt: any) => allTagsInPapers.push(pt.tag))
+                        (p.tags || []).forEach((pt: any) => allTagsInPapers.push(pt.tag))
                       })
-                      const targetTag = allTagsInPapers.find((tag: any) => tag.name === tagName)
-                      if (targetTag) {
-                        onTagSelect(targetTag.id)
-                      }
+                      const targetTag = allTagsInPapers.find((tag: any) => tag.name === t.name)
+                      if (targetTag) onTagSelect(targetTag.id)
                     }}
                   >
                     <div className="flex items-center">
-                      <span
-                        className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
-                        style={{ backgroundColor: data.color }}
-                      ></span>
-                      <span className="text-sm font-medium text-gray-900 truncate">{tagName}</span>
+                      <span className="w-3 h-3 rounded-full mr-2 flex-shrink-0" style={{ backgroundColor: t.color }}></span>
+                      <span className="text-sm font-medium text-gray-900 truncate">{t.name}</span>
                     </div>
                   </button>
-                  <span className="text-sm font-semibold text-gray-600 ml-2">{data.count} 篇</span>
+                  <span className="text-sm font-semibold text-gray-600 ml-2">{t.count} 篇</span>
                 </div>
               </div>
             ))}
+            {sortedTags.length === 0 && <div className="text-sm text-gray-500">無標籤資料</div>}
           </div>
         </div>
         

@@ -12,6 +12,7 @@ from schemas import (
     AuthorCreate, AuthorResponse,
     TagCreate, TagResponse,
     VenueCreate, VenueResponse,
+    YearCount, VenueCount, TagCount,
     SearchFilters,
     ComplexSearchQuery,
     ExcelImportResult,
@@ -22,6 +23,7 @@ from schemas import (
 )
 from crud import (
     create_paper, get_papers, get_paper, update_paper, delete_paper,
+    get_year_distribution, get_venue_distribution, get_tag_distribution,
     create_author, get_authors,
     create_tag, get_tags,
     create_venue, get_venues,
@@ -179,6 +181,21 @@ async def count_papers_by_tag(tag_name: str, db: Session = Depends(get_db)):
     """獲取具有特定標籤的論文數量"""
     count = count_papers_with_tag(db, tag_name)
     return {"tag_name": tag_name, "count": count}
+
+@app.get("/papers/stats/year-distribution", response_model=List[YearCount])
+async def get_paper_year_distribution(db: Session = Depends(get_db)):
+    """統計所有論文的年份分布"""
+    return get_year_distribution(db)
+
+@app.get("/papers/stats/venue-distribution", response_model=List[VenueCount])
+async def venue_distribution(db: Session = Depends(get_db)):
+    """獲取前15名期刊/會議分布"""
+    return get_venue_distribution(db)
+
+@app.get("/papers/stats/tag-distribution", response_model=List[TagCount])
+async def tag_distribution(db: Session = Depends(get_db)):
+    """獲取前5名標籤分布"""
+    return get_tag_distribution(db)
 
 # 文件上傳下載端點
 @app.post("/papers/{paper_id}/upload-pdf/")

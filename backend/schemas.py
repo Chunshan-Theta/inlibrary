@@ -45,6 +45,23 @@ class TagResponse(TagBase):
     
     id: int
 
+# 統計資料用的 Schemas
+class YearCount(BaseModel):
+    year: int
+    count: int
+
+class VenueCount(BaseModel):
+    name: str
+    type: str
+    impact_factor: Optional[float] = None
+    count: int
+
+class TagCount(BaseModel):
+    id: Optional[int]
+    name: str
+    color: str
+    count: int
+
 # Paper schemas
 class PaperBase(BaseModel):
     title: str
