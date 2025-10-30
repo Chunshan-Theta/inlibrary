@@ -19,6 +19,24 @@ export const papersApi = {
     return response.data
   },
 
+  // 獲取年份分布
+  async getYearDistribution(): Promise<Record<number, number>> {
+    const response = await api.get('/papers/stats/year-distribution')
+    return response.data
+  },
+
+  // 獲取期刊/會議分布
+  async getVenueDistribution(): Promise<{ name: string; type: string; impact_factor?: number; count: number }[]> {
+    const response = await api.get('/papers/stats/venue-distribution')
+    return response.data
+  },
+
+  // 獲取標籤分布
+  async getTagDistribution(): Promise<{ name: string; color: string; count: number }[]> {
+    const response = await api.get('/papers/stats/tag-distribution')
+    return response.data
+  },
+
   // 創建論文
   async createPaper(paper: PaperCreate): Promise<Paper> {
     const response = await api.post('/papers/', paper)

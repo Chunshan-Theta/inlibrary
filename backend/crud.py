@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, or_, func, text
+from sqlalchemy import and_, desc, or_, func, text
 from typing import List, Optional
 from models import Paper, Author, PaperAuthor, Tag, PaperTag, Venue
 from schemas import (
@@ -77,6 +77,39 @@ def get_paper(db: Session, paper_id: int):
         joinedload(Paper.authors).joinedload(PaperAuthor.author),
         joinedload(Paper.tags).joinedload(PaperTag.tag)
     ).filter(Paper.id == paper_id).first()
+
+def get_year_distribution(db):
+    results = (
+        db.query(Paper.publication_year, func.count(Paper.id))
+        .group_by(Paper.publication_year)
+        .order_by(Paper.publication_year)
+        .all()
+    )
+    return [
+        {"year": year, "count": count}
+        for year, count in results
+        if year is not None
+    ]
+
+def get_venue_distribution(db: Session):
+    # 統計前15名期刊/會議
+    result = db.query(
+        Venue.name,
+        Venue.type,
+        Venue.impact_factor,
+        func.count(Paper.id).label("count")
+    ).join(Paper).group_by(Venue.id).order_by(desc("count")).limit(15).all()
+    return [{"name": r.name, "type": r.type, "impact_factor": r.impact_factor, "count": r.count} for r in result]
+
+def get_tag_distribution(db: Session):
+    # 統計前5名標籤
+    result = db.query(
+        Tag.id,
+        Tag.name,
+        Tag.color,
+        func.count(PaperTag.paper_id).label("count")
+    ).join(PaperTag).group_by(Tag.id).order_by(desc("count")).limit(5).all()
+    return [{"id": r.id, "name": r.name, "color": r.color, "count": r.count} for r in result]
 
 def count_all_papers(db: Session) -> int:
     """計算所有論文的總數"""
