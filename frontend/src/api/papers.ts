@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { Paper, SearchFilters, PaperCreate, Author, Tag, Venue, ExcelImportResult, ComplexSearchQuery, ExcelPreviewResponse, ExcelImportConfig, BatchTagOperation, BatchTagResult } from '../types'
+import { Paper, SearchFilters, PaperCreate, Author, Tag, Venue, ExcelImportResult, ComplexSearchQuery, ExcelPreviewResponse, ExcelImportConfig, BatchTagOperation, BatchTagResult, PDFInfoResponse } from '../types'
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
@@ -71,6 +71,12 @@ export const papersApi = {
       skip,
       limit
     })
+    return response.data
+  },
+
+  // 內容比對搜索 (Phase 2)
+  async searchRelated(paperData: PaperCreate): Promise<Paper[]> {
+    const response = await api.post('/papers/search/related/', paperData)
     return response.data
   },
 
@@ -175,6 +181,19 @@ export const papersApi = {
     formData.append('file', file)
     
     const response = await api.post('/papers/import-excel/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+
+  // PDF 解析 API
+  async extractPdfInfo(file: File): Promise<PDFInfoResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await api.post('/papers/extract-pdf-info/', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

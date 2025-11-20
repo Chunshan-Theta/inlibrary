@@ -1,6 +1,7 @@
+import unicodedata
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, desc, or_, func, text
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from models import Paper, Author, PaperAuthor, Tag, PaperTag, Venue
 from schemas import (
     PaperCreate, PaperUpdate, AuthorCreate, TagCreate, VenueCreate, SearchFilters, 
@@ -28,7 +29,8 @@ def create_paper(db: Session, paper: PaperCreate):
         citation_count=paper.citation_count,
         venue_id=paper.venue_id,
         keywords=paper.keywords,
-        url=paper.url
+        url=paper.url,
+        document_type=paper.document_type # 新增 document_type 欄位
     )
     db.add(db_paper)
     db.commit()
@@ -521,3 +523,76 @@ def batch_remove_tags_from_papers(db: Session, paper_ids: List[int], tag_ids: Li
         updated_paper_ids=updated_paper_ids,
         errors=errors
     ) 
+
+def search_related_papers(db: Session, paper_data: PaperCreate, limit: int = 5):
+    """
+    根據新資源的元數據 (標題、作者、關鍵字) 搜索潛在相關的現有資源 (模糊匹配)。
+    """
+    # 限制只搜索 Paper 類型 (可根據需求調整)
+    query = db.query(Paper).options(
+        joinedload(Paper.authors).joinedload(PaperAuthor.author),
+        joinedload(Paper.tags).joinedload(PaperTag.tag)
+    )
+    
+    conditions = []
+
+    # 0. DOI 精確匹配
+    if paper_data.doi:
+        conditions.append(Paper.doi == paper_data.doi)
+    
+    # 1: 強化標題比對 (新增 Unicode 正規化)
+    if paper_data.title:
+        raw_title = paper_data.title
+        
+        # 1. 進行 Unicode NFC 正規化 (將組合字元轉換為標準形式)
+        # 這是解決中文環境中隱藏字元差異的關鍵步驟
+        normalized_title = unicodedata.normalize('NFC', raw_title) 
+        
+        # 2. 更嚴格的清理：去除頭尾空格並替換常見的非標準空格
+        temp_title = normalized_title.replace('\u00a0', ' ').replace('\u202f', ' ').strip()
+        cleaned_title_lower = temp_title.lower()
+
+        if cleaned_title_lower:
+            # 組合條件：優先精確匹配 (忽略空格、大小寫和 Unicode 差異) OR 模糊匹配
+            title_match_condition = or_(
+                # 關鍵：精確匹配 (同時對資料庫和輸入值進行 to_lower 和 trim)
+                func.lower(func.trim(Paper.title)) == cleaned_title_lower, 
+                # 模糊匹配 (保留原功能)
+                Paper.title.ilike(f'%{temp_title}%') 
+            )
+            conditions.append(title_match_condition)
+        
+    # 2. 作者模糊匹配
+    # 注意: 這裡使用了 OR 條件來檢查任一作者名是否包含在已有的作者名中
+    if hasattr(paper_data, 'author_names') and paper_data.author_names:
+        # 將輸入的作者名拆分成關鍵詞
+        author_keywords = paper_data.author_names.split(',')
+        author_conditions = []
+        for keyword in author_keywords:
+             keyword = keyword.strip()
+             if keyword:
+                # 假設 Author.name 是全文可搜索的，這裡使用 ilike
+                author_conditions.append(func.lower(Author.name).like(f'%{func.lower(keyword)}%'))
+        
+        if author_conditions:
+            query = query.join(PaperAuthor).join(Author)
+            conditions.append(or_(*author_conditions))
+            
+    # 3. 關鍵字匹配 (檢查標題或摘要包含關鍵字)
+    if paper_data.keywords and isinstance(paper_data.keywords, list):
+        keyword_conditions = []
+        for keyword in paper_data.keywords:
+            if keyword:
+                keyword_conditions.append(Paper.title.ilike(f'%{keyword}%'))
+                keyword_conditions.append(Paper.abstract.ilike(f'%{keyword}%'))
+        
+        if keyword_conditions:
+            conditions.append(or_(*keyword_conditions))
+            
+    
+    if conditions:
+        # 使用 OR 連接所有模糊匹配條件，尋求潛在相關性
+        query = query.filter(or_(*conditions))
+    
+    # 限制結果數量
+    return query.distinct().limit(limit).all()

@@ -33,8 +33,9 @@ class Paper(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(1000), nullable=False)
     abstract = Column(Text)
+    document_type = Column(String(50), default='paper', nullable=False) # 新增：文件類型
     publication_year = Column(Integer, nullable=False)
-    doi = Column(String(255), unique=True)
+    doi = Column(String(255), unique=True, nullable=True) # 修改：設為 nullable=True
     citation_count = Column(Integer, default=0)
     venue_id = Column(Integer, ForeignKey("venues.id"))
     pdf_file_path = Column(String(500))

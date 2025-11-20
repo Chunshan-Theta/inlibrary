@@ -323,9 +323,10 @@ export default function PaperList({ searchQuery }: PaperListProps) {
                 <span>詳情</span>
               </button>
               
-              {paper.url && (
+              {/* 論文連結：優先使用 DOI，否則使用原始 URL */}
+              {(paper.doi || (paper.url && paper.url.startsWith('http'))) && (
                 <a
-                  href={paper.url.startsWith('http') ? paper.url : `https://www.google.com/search?q=${paper.url}`}
+                  href={paper.doi ? `https://doi.org/${paper.doi}` : paper.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-700"
@@ -335,6 +336,9 @@ export default function PaperList({ searchQuery }: PaperListProps) {
                   </svg>
                   <span>論文連結</span>
                 </a>
+              )}
+              {!paper.doi && (!paper.url || !paper.url.startsWith('http')) && (
+                <span className="text-gray-400 text-sm">無可用連結</span>
               )}
               
               {paper.pdf_file_path && (
@@ -356,7 +360,7 @@ export default function PaperList({ searchQuery }: PaperListProps) {
         </div>
       ))}
 
-      {/* 批量標籤操作彈窗 */}
+      {/* 批量標籤操作彈窗 (略) */}
       {showTagModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
@@ -470,9 +474,9 @@ function PaperDetailModal({ paper, onClose }: PaperDetailModalProps) {
           </div>
 
           <div className="space-y-4">
-            {/* 基本信息 */}
+            {/* 基本資訊 */}
             <div>
-              <h3 className="text-lg font-semibold mb-2">基本信息</h3>
+              <h3 className="text-lg font-semibold mb-2">基本資訊</h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div><span className="font-medium">發表年份:</span> {paper.publication_year}</div>
                 <div><span className="font-medium">引用數:</span> {paper.citation_count}</div>
@@ -482,17 +486,23 @@ function PaperDetailModal({ paper, onClose }: PaperDetailModalProps) {
                     <span className="font-medium">期刊/會議:</span> {paper.venue.name}
                   </div>
                 )}
-                {paper.url && (
+                {/* 論文連結：優先使用 DOI，否則使用原始 URL */}
+                {(paper.doi || paper.url) && (
                   <div className="col-span-2">
                     <span className="font-medium">論文連結:</span>{' '}
-                    <a 
-                      href={paper.url} 
-                      target="_blank" 
+                    <a
+                      href={paper.doi ? `https://doi.org/${paper.doi}` : paper.url}
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="text-primary-600 hover:text-primary-800 underline break-all"
                     >
-                      {paper.url}
+                      {paper.doi ? `https://doi.org/${paper.doi}` : paper.url}
                     </a>
+                  </div>
+                )}
+                {!(paper.doi || paper.url) && (
+                  <div className="col-span-2 text-sm text-gray-500 italic">
+                    無可用連結
                   </div>
                 )}
               </div>

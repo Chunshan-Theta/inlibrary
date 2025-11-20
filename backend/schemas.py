@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Union
 from datetime import datetime
 
@@ -66,8 +66,14 @@ class TagCount(BaseModel):
 class PaperBase(BaseModel):
     title: str
     abstract: Optional[str] = None
-    publication_year: int
-    doi: Optional[str] = None
+    publication_year: int = Field(
+        ..., 
+        ge=1995, # 最小限制為 1995
+        le=datetime.now().year, # 最大限制為當前年份
+        description="論文/資源發表的年份"
+    )
+    document_type: Optional[str] = 'paper' # 新增：文件類型，預設為 'paper'
+    doi: Optional[str] = None # 確保 DOI 可選/可為 None
     citation_count: Optional[int] = 0
     venue_id: Optional[int] = None
     keywords: Optional[List[str]] = None
@@ -187,6 +193,17 @@ class FileImportResult(BaseModel):
     failed_imports: int
     errors: List[str]
     imported_papers: List[PaperResponse]
+
+# PDF 解析結果 Schema
+class PDFInfoResponse(BaseModel):
+    title: Optional[str] = None
+    abstract: Optional[str] = None
+    publication_year: Optional[int] = None
+    doi: Optional[str] = None
+    venue: Optional[str] = None  # 期刊/會議名稱
+    authors: Optional[List[str]] = None
+    keywords: Optional[List[str]] = None
+    extracted_text_snippet: Optional[str] = None # 提取的前幾行文本，用於檢查
 
 # Excel compatibility aliases
 ExcelColumnInfo = FileColumnInfo
