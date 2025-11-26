@@ -209,6 +209,21 @@ async def tag_distribution(db: Session = Depends(get_db)):
     """獲取前5名標籤分布"""
     return get_tag_distribution(db)
 
+@app.post("/papers/{paper_id}/merge/")
+async def merge_paper_endpoint(
+    paper_id: int,
+    new_data: PaperCreate,
+    mode: str = "overwrite",   # keep_old, overwrite, merge_fields
+    fields: List[str] = Query(None),  # 若 mode = merge_fields，前端會傳欄位列表
+    db: Session = Depends(get_db)
+):
+    from crud import merge_paper
+
+    merged = merge_paper(db, paper_id, new_data, mode, fields)
+    if merged is None:
+        raise HTTPException(status_code=404, detail="論文未找到")
+    return merged
+
 # 文件上傳下載端點
 @app.post("/papers/{paper_id}/upload-pdf/")
 async def upload_paper_pdf(

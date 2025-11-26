@@ -1,6 +1,6 @@
 import unicodedata
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, desc, or_, func, text
+from sqlalchemy.orm import Session, joinedload, aliased
+from sqlalchemy import and_, desc, or_, func, text, exists, case
 from typing import List, Optional, Dict, Any
 from models import Paper, Author, PaperAuthor, Tag, PaperTag, Venue
 from schemas import (
@@ -524,75 +524,203 @@ def batch_remove_tags_from_papers(db: Session, paper_ids: List[int], tag_ids: Li
         errors=errors
     ) 
 
+def normalize_text(s: str):
+    if not s:
+        return ""
+    s = unicodedata.normalize("NFKC", s)
+    s = s.replace("\u00a0", " ").replace("\u202f", " ")
+    s = " ".join(s.split())  # 移除多餘空白
+    return s.strip().lower()
+
+
 def search_related_papers(db: Session, paper_data: PaperCreate, limit: int = 5):
-    """
-    根據新資源的元數據 (標題、作者、關鍵字) 搜索潛在相關的現有資源 (模糊匹配)。
-    """
-    # 限制只搜索 Paper 類型 (可根據需求調整)
-    query = db.query(Paper).options(
-        joinedload(Paper.authors).joinedload(PaperAuthor.author),
-        joinedload(Paper.tags).joinedload(PaperTag.tag)
-    )
-    
-    conditions = []
-
-    # 0. DOI 精確匹配
+    # (0) DOI 精準匹配
     if paper_data.doi:
-        conditions.append(Paper.doi == paper_data.doi)
-    
-    # 1: 強化標題比對 (新增 Unicode 正規化)
-    if paper_data.title:
-        raw_title = paper_data.title
-        
-        # 1. 進行 Unicode NFC 正規化 (將組合字元轉換為標準形式)
-        # 這是解決中文環境中隱藏字元差異的關鍵步驟
-        normalized_title = unicodedata.normalize('NFC', raw_title) 
-        
-        # 2. 更嚴格的清理：去除頭尾空格並替換常見的非標準空格
-        temp_title = normalized_title.replace('\u00a0', ' ').replace('\u202f', ' ').strip()
-        cleaned_title_lower = temp_title.lower()
+        doi_clean = paper_data.doi.strip().lower()
+        exists = (
+            db.query(Paper)
+            .filter(func.lower(Paper.doi) == doi_clean)
+            .options(joinedload(Paper.authors).joinedload(PaperAuthor.author))
+            .first()
+        )
+        if exists:
+            return [exists]
 
-        if cleaned_title_lower:
-            # 組合條件：優先精確匹配 (忽略空格、大小寫和 Unicode 差異) OR 模糊匹配
-            title_match_condition = or_(
-                # 關鍵：精確匹配 (同時對資料庫和輸入值進行 to_lower 和 trim)
-                func.lower(func.trim(Paper.title)) == cleaned_title_lower, 
-                # 模糊匹配 (保留原功能)
-                Paper.title.ilike(f'%{temp_title}%') 
-            )
-            conditions.append(title_match_condition)
+    # (1) 標題比對
+    title_norm = normalize_text(paper_data.title)
+
+    # 使用 PostgreSQL LOWER + REPLACE 清洗資料庫字串
+    db_title_norm = func.lower(
+        func.replace(
+            func.replace(
+                func.replace(Paper.title, "\u00a0", " "),
+                "\u202f",
+                " "
+            ),
+            "  ",
+            " "
+        )
+    )
+
+    # 精準匹配（將雙空白變單空白）
+    exact = db_title_norm == title_norm
+
+    # 模糊匹配（不再用 %lowered_title%）
+    fuzzy = db_title_norm.ilike(f"%{title_norm[:20]}%")  # 前20字強匹配
+
+    query = (
+        db.query(Paper)
+        .options(joinedload(Paper.authors).joinedload(PaperAuthor.author))
+        .filter(or_(exact, fuzzy))
+    )
+
+    results = query.distinct().limit(limit).all()
+
+    if results:
+        return results
+
+    # fallback
+    return db.query(Paper).limit(limit).all()
+
+# def search_related_papers(db: Session, paper_data: PaperCreate, limit: int = 5):
+#     """
+#     根據新資源的元數據 (DOI、標題、作者、關鍵字) 搜索潛在相關的現有資源。
+#     重點：
+#     - 永遠優先執行 DOI 精準比對（禁止 miss）
+#     - Title 做 Unicode 正規化 + 嚴格與鬆散比對
+#     - 作者與關鍵字作為輔助
+#     """
+
+#     # ---------------------------------------------------------
+#     # 🔍 (0) DOI 精準匹配 — 永遠第一順位，且不會 fail
+#     # ---------------------------------------------------------
+#     if paper_data.doi:
+#         exists = (
+#             db.query(Paper)
+#             .filter(func.lower(Paper.doi) == paper_data.doi.strip().lower())
+#             .options(
+#                 joinedload(Paper.authors).joinedload(PaperAuthor.author),
+#                 joinedload(Paper.tags).joinedload(PaperTag.tag)
+#             )
+#             .first()
+#         )
+#         if exists:
+#             # 若 DOI 已存在 → 直接回傳該筆
+#             return [exists]
+
+#     # ---------------------------------------------------------
+#     # 基礎 query：限制 Paper 類型
+#     # ---------------------------------------------------------
+#     query = (
+#         db.query(Paper)
+#         .options(
+#             joinedload(Paper.authors).joinedload(PaperAuthor.author),
+#             joinedload(Paper.tags).joinedload(PaperTag.tag)
+#         )
+#     )
+
+#     conditions = []
+
+#     # ---------------------------------------------------------
+#     # (1) 標題比對：Unicode 正規化 + 精準 + 模糊
+#     # ---------------------------------------------------------
+#     if paper_data.title:
+#         raw_title = paper_data.title
+
+#         # Unicode 正規化（必要處理）
+#         normalized = unicodedata.normalize("NFC", raw_title)
+
+#         # 替換不常見空白符
+#         clean_title = (
+#             normalized.replace("\u00a0", " ")
+#             .replace("\u202f", " ")
+#             .strip()
+#             .lower()
+#         )
+
+#         if clean_title:
+#             # title 精準匹配（lower + trim）
+#             exact_title = func.lower(func.trim(Paper.title)) == clean_title
+
+#             # 模糊匹配
+#             fuzzy_title = Paper.title.ilike(f"%{clean_title}%")
+
+#             conditions.append(or_(exact_title, fuzzy_title))
+
+#     # ---------------------------------------------------------
+#     # (2) 作者比對：任何一位作者命中就算相關
+#     # ---------------------------------------------------------
+#     if getattr(paper_data, "author_names", None):
+#         author_keys = [
+#             k.strip().lower()
+#             for k in paper_data.author_names.split(",")
+#             if k.strip()
+#         ]
+#         if author_keys:
+#             query = query.join(PaperAuthor).join(Author)
+#             author_conditions = [
+#                 func.lower(Author.name).ilike(f"%{k}%") for k in author_keys
+#             ]
+#             conditions.append(or_(*author_conditions))
+
+#     # ---------------------------------------------------------
+#     # (3) 關鍵字比對：標題/摘要模糊查詢
+#     # ---------------------------------------------------------
+#     if paper_data.keywords and isinstance(paper_data.keywords, list):
+#         kw_conditions = []
+#         for kw in paper_data.keywords:
+#             if kw:
+#                 kw_conditions.append(Paper.title.ilike(f"%{kw}%"))
+#                 kw_conditions.append(Paper.abstract.ilike(f"%{kw}%"))
+
+#         if kw_conditions:
+#             conditions.append(or_(*kw_conditions))
+
+#     # ---------------------------------------------------------
+#     # (4) 合併條件
+#     # ---------------------------------------------------------
+#     if conditions:
+#         query = query.filter(or_(*conditions))
+
+#     results = query.distinct().limit(limit).all()
+
+#     # ---------------------------------------------------------
+#     # (5) fallback：至少回傳 limit 筆 → 讓 Step 4 一定會執行
+#     # ---------------------------------------------------------
+#     if not results:
+#         results = (
+#             db.query(Paper)
+#             .limit(limit)
+#             .all()
+#         )
+
+#     return results
+
+def merge_paper(db: Session, paper_id: int, new_data: PaperCreate, mode: str, fields: List[str] = None):
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        return None
+
+    if mode == "keep_old":
+        return paper
+
+    if mode == "overwrite":
+        # 直接覆蓋（完整更新）
+        update = PaperUpdate(**new_data.model_dump())
+        return update_paper(db, paper_id, update)
+
+    if mode == "merge_fields":
+        if not fields:
+            return paper
         
-    # 2. 作者模糊匹配
-    # 注意: 這裡使用了 OR 條件來檢查任一作者名是否包含在已有的作者名中
-    if hasattr(paper_data, 'author_names') and paper_data.author_names:
-        # 將輸入的作者名拆分成關鍵詞
-        author_keywords = paper_data.author_names.split(',')
-        author_conditions = []
-        for keyword in author_keywords:
-             keyword = keyword.strip()
-             if keyword:
-                # 假設 Author.name 是全文可搜索的，這裡使用 ilike
-                author_conditions.append(func.lower(Author.name).like(f'%{func.lower(keyword)}%'))
-        
-        if author_conditions:
-            query = query.join(PaperAuthor).join(Author)
-            conditions.append(or_(*author_conditions))
-            
-    # 3. 關鍵字匹配 (檢查標題或摘要包含關鍵字)
-    if paper_data.keywords and isinstance(paper_data.keywords, list):
-        keyword_conditions = []
-        for keyword in paper_data.keywords:
-            if keyword:
-                keyword_conditions.append(Paper.title.ilike(f'%{keyword}%'))
-                keyword_conditions.append(Paper.abstract.ilike(f'%{keyword}%'))
-        
-        if keyword_conditions:
-            conditions.append(or_(*keyword_conditions))
-            
-    
-    if conditions:
-        # 使用 OR 連接所有模糊匹配條件，尋求潛在相關性
-        query = query.filter(or_(*conditions))
-    
-    # 限制結果數量
-    return query.distinct().limit(limit).all()
+        update_dict = {}
+        raw = new_data.model_dump()
+
+        for f in fields:
+            if f in raw:
+                update_dict[f] = raw[f]
+
+        update = PaperUpdate(**update_dict)
+        return update_paper(db, paper_id, update)
+
+    return paper

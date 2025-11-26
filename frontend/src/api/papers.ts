@@ -80,6 +80,28 @@ export const papersApi = {
     return response.data
   },
 
+  // 合併論文（覆蓋 / 保留舊資料 / 欄位合併）
+  async mergePaper(
+    paperId: number,
+    newData: PaperCreate,
+    mode: "keep_old" | "overwrite" | "merge_fields",
+    fields?: string[]
+  ): Promise<Paper> {
+    // 修正：將 mode 和 fields 放入 URL Query String
+    const params = new URLSearchParams()
+    params.append('mode', mode)
+    
+    if (fields && fields.length > 0) {
+      fields.forEach(field => params.append('fields', field))
+    }
+
+    // 注意：newData (Body) 和 params (Query) 分開傳遞
+    const response = await api.post(
+      `/papers/${paperId}/merge/?${params.toString()}`, 
+      newData
+    )
+    return response.data;
+  },
   // 上傳 PDF 文件
   async uploadPdf(paperId: number, file: File): Promise<{ message: string; file_url: string }> {
     const formData = new FormData()

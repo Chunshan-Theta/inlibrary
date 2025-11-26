@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { papersApi, authorsApi, tagsApi, venuesApi } from '../api/papers'
 import { PaperCreate, Author, Tag, Venue, Paper } from '../types'
 // 引入新的圖標用於多媒體和類型區分
-import { DocumentTextIcon, FolderIcon, VideoCameraIcon, PresentationChartBarIcon, BookOpenIcon, AcademicCapIcon, ArrowUpTrayIcon, PlusIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
+import { DocumentTextIcon, FolderIcon, VideoCameraIcon, PresentationChartBarIcon, BookOpenIcon, AcademicCapIcon, ArrowUpTrayIcon, PlusIcon, CodeBracketIcon,ExclamationTriangleIcon, CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/outline'
 
 interface AddPaperModalProps {
   isOpen: boolean
@@ -15,6 +15,146 @@ interface AddPaperModalProps {
 
 type Step = 'upload' | 'type_decision' | 'form_fill' | 'comparison'
 type DocumentType = 'paper' | 'book' | 'video' | 'presentation' | 'other'
+
+// --- Helper Components ---
+
+// 單個合併候選人組件 (解決多個候選人狀態衝突問題)
+interface MergeCandidateCardProps {
+  existingPaper: Paper
+  newData: PaperCreate
+  onConfirm: (paperId: number, mode: "keep_old" | "overwrite" | "merge_fields", fields?: string[]) => void
+  isProcessing: boolean
+}
+
+const MergeCandidateCard = ({ existingPaper, newData, onConfirm, isProcessing }: MergeCandidateCardProps) => {
+  const [mode, setMode] = useState<"keep_old" | "overwrite" | "merge_fields">("keep_old")
+  const [selectedFields, setSelectedFields] = useState<string[]>([])
+
+  // 定義要比對的欄位
+  const compareFields: { key: keyof PaperCreate; label: string }[] = [
+    { key: 'title', label: '標題' },
+    { key: 'publication_year', label: '年份' },
+    { key: 'abstract', label: '摘要' },
+    { key: 'doi', label: 'DOI' },
+    { key: 'url', label: 'URL' },
+    { key: 'citation_count', label: '引用數' }
+  ]
+
+  // 自動切換 Checkbox
+  const toggleField = (field: string) => {
+    if (mode !== 'merge_fields') setMode('merge_fields')
+    setSelectedFields(prev => 
+      prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]
+    )
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm mb-4">
+      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+        <div className="flex items-center space-x-2">
+          <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500" />
+          <span className="font-medium text-gray-900">發現相關資源 (ID: {existingPaper.id})</span>
+        </div>
+        <span className="text-xs text-gray-500">相似度高</span>
+      </div>
+
+      <div className="p-4">
+        {/* 比對表格 */}
+        <div className="overflow-x-auto border rounded-md mb-4">
+          <table className="min-w-full text-sm text-left">
+            <thead className="bg-gray-50">
+              <tr className="border-b">
+                <th className="py-2 px-3 font-medium text-gray-500 w-24">欄位</th>
+                <th className="py-2 px-3 font-medium text-gray-500 w-5/12">現有資料 (舊)</th>
+                <th className="py-2 px-3 font-medium text-blue-600 w-5/12">提交資料 (新)</th>
+                <th className="py-2 px-3 font-medium text-gray-500 text-center w-16">選取</th>
+              </tr>
+            </thead>
+            <tbody>
+              {compareFields.map(({ key, label }) => {
+                const oldVal = (existingPaper as any)[key]?.toString() || ''
+                const newVal = (newData as any)[key]?.toString() || ''
+                const isDiff = oldVal.trim() !== newVal.trim()
+                const isSelected = selectedFields.includes(key as string)
+
+                return (
+                  <tr key={key} className={`border-b last:border-0 ${isDiff ? 'bg-yellow-50/30' : ''}`}>
+                    <td className="py-2 px-3 font-medium text-gray-700">{label}</td>
+                    <td className="py-2 px-3 text-gray-600 truncate max-w-[150px]" title={oldVal}>
+                      {oldVal || <span className="text-gray-300 italic">(空)</span>}
+                    </td>
+                    <td className={`py-2 px-3 truncate max-w-[150px] ${isDiff ? 'text-blue-700 font-medium' : 'text-gray-400'}`} title={newVal}>
+                      {newVal || <span className="text-gray-300 italic">(空)</span>}
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      {isDiff && (
+                        <input
+                          type="checkbox"
+                          checked={isSelected || mode === 'overwrite'}
+                          disabled={mode === 'overwrite' || mode === 'keep_old'}
+                          onChange={() => toggleField(key as string)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+                        />
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 合併選項控制 */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50 p-3 rounded-md border border-gray-200">
+          <label className={`relative flex flex-col p-3 rounded-lg border cursor-pointer transition-all ${mode === 'keep_old' ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-gray-200 hover:border-gray-300'}`}>
+            <div className="flex items-center mb-1">
+              <input type="radio" name={`mode-${existingPaper.id}`} checked={mode === 'keep_old'} onChange={() => setMode('keep_old')} className="mr-2" />
+              <span className="font-semibold text-sm text-gray-900">保留舊資料</span>
+            </div>
+            <span className="text-xs text-gray-500 ml-6">僅附加檔案，不修改元數據</span>
+          </label>
+
+          <label className={`relative flex flex-col p-3 rounded-lg border cursor-pointer transition-all ${mode === 'overwrite' ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-gray-200 hover:border-gray-300'}`}>
+            <div className="flex items-center mb-1">
+              <input type="radio" name={`mode-${existingPaper.id}`} checked={mode === 'overwrite'} onChange={() => setMode('overwrite')} className="mr-2" />
+              <span className="font-semibold text-sm text-gray-900">完全覆蓋</span>
+            </div>
+            <span className="text-xs text-gray-500 ml-6">用新資料完全取代舊資料</span>
+          </label>
+
+          <label className={`relative flex flex-col p-3 rounded-lg border cursor-pointer transition-all ${mode === 'merge_fields' ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-gray-200 hover:border-gray-300'}`}>
+            <div className="flex items-center mb-1">
+              <input type="radio" name={`mode-${existingPaper.id}`} checked={mode === 'merge_fields'} onChange={() => setMode('merge_fields')} className="mr-2" />
+              <span className="font-semibold text-sm text-gray-900">選擇欄位</span>
+            </div>
+            <span className="text-xs text-gray-500 ml-6">僅更新勾選的特定欄位</span>
+          </label>
+        </div>
+
+        {/* 確認按鈕 */}
+        <div className="mt-4 flex justify-end border-t pt-4">
+          <button
+            onClick={() => onConfirm(existingPaper.id, mode, selectedFields)}
+            disabled={isProcessing}
+            className="btn-primary flex items-center space-x-2 text-sm shadow-sm"
+          >
+            {isProcessing ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>處理中...</span>
+              </>
+            ) : (
+              <>
+                <CheckCircleIcon className="h-5 w-5" />
+                <span>確認合併並上傳檔案</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // MOCK: 模擬元數據抽取和類型預判
 const getInitialTypeAndMockData = (file: File): { initialType: DocumentType, initialData: Partial<PaperCreate> } => {
@@ -52,6 +192,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
   const [documentType, setDocumentType] = useState<DocumentType | null>(null)
   const [relatedPapers, setRelatedPapers] = useState<Paper[] | null>(null) // <-- NEW: 儲存搜索結果
   const [finalSubmitData, setFinalSubmitData] = useState<PaperCreate | null>(null) // <-- NEW: 儲存填寫好的數據
+  const [isMerging, setIsMerging] = useState(false)
   const queryClient = useQueryClient()
   
   const defaultValues: DefaultValues<PaperCreate> = {
@@ -71,6 +212,9 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
     reset()
     setSelectedFile(null)
     setDocumentType(null)
+    setRelatedPapers(null)
+    setFinalSubmitData(null)
+    setIsMerging(false)
     setStep('upload')
   }
 
@@ -121,18 +265,60 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
   // NEW: 搜索相關資源的 Mutation
   const relatedSearchMutation = useMutation(papersApi.searchRelated, {
     onSuccess: (results) => {
+      if (results && results.length > 0) {
         setRelatedPapers(results)
-        setStep('comparison') // 轉換到比對步驟
+        setStep('comparison')
+      } else {
+        // 無相關資源，直接創建
+        if (finalSubmitData) createPaperMutation.mutate(finalSubmitData)
+      }
     },
-    onError: (error: any) => {
-        console.error('相關內容搜索失敗:', error)
-        alert('內容比對失敗，將直接創建新資源。')
-        // Fallback: 如果搜索失敗，直接創建新資源
-        if (finalSubmitData) {
-            createPaperMutation.mutate(finalSubmitData)
-        }
+    onError: () => {
+      // 搜索失敗，降級為直接創建
+      if (finalSubmitData) createPaperMutation.mutate(finalSubmitData)
     }
   })
+
+  // Handler: 執行合併 (Phase 3: C_INTEGRATE)
+  const handleProcessMerge = async (paperId: number, mode: "keep_old" | "overwrite" | "merge_fields", fields?: string[]) => {
+    if (!finalSubmitData || !selectedFile) return
+    setIsMerging(true)
+
+    try {
+      // 1. 呼叫 API 合併資料 (更新資料庫)
+      await papersApi.mergePaper(paperId, finalSubmitData, mode, fields)
+
+      // 2. 呼叫 API 上傳檔案
+      await papersApi.uploadPdf(paperId, selectedFile)
+
+      alert(`合併成功！檔案 ${selectedFile.name} 已成功附加到資源 ID: ${paperId}。`)
+      queryClient.invalidateQueries('papers')
+      handleClose()
+    } catch (error: any) {
+      console.error('合併過程失敗:', error)
+      
+      // 修正：更聰明的錯誤訊息顯示
+      let errorMsg = '未知錯誤'
+      const detail = error?.response?.data?.detail
+
+      if (typeof detail === 'string') {
+        // 如果是普通字串錯誤
+        errorMsg = detail
+      } else if (Array.isArray(detail)) {
+        // 如果是 Pydantic 驗證錯誤陣列 (422)
+        // 取出第一個錯誤的欄位和訊息
+        const firstError = detail[0]
+        const field = firstError?.loc?.join('.') || '欄位'
+        errorMsg = `${field}: ${firstError?.msg}`
+      } else if (error?.message) {
+        errorMsg = error.message
+      }
+
+      alert(`合併失敗: ${errorMsg}`)
+    } finally {
+      setIsMerging(false)
+    }
+  }
 
   // 處理檔案變更 (Phase 0)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => { // 設為 async
@@ -212,38 +398,6 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
         setValue('venue_id', undefined)
         setValue('citation_count', 0)
     }
-  }
-
-  // NEW: 整合/附加檔案處理函式 (Phase 3: C_INTEGRATE)
-  const handleIntegrate = async (existingPaperId: number) => {
-    if (!selectedFile) {
-        alert('錯誤：找不到要附加的檔案。')
-        return
-    }
-    
-    // 這裡我們直接呼叫 API 來上傳文件到現有 Paper ID
-    try {
-        await papersApi.uploadPdf(existingPaperId, selectedFile)
-        
-        // 刷新列表和通知
-        queryClient.invalidateQueries('papers')
-        alert(`文件 ${selectedFile.name} 已成功附加到現有資源 ID: ${existingPaperId}。`)
-        handleClose()
-        
-    } catch (error) {
-        console.error('整合/附加檔案失敗:', error)
-        alert('整合檔案失敗，請檢查後端日誌。')
-    }
-  }  
-
-  // Phase 3: 最終創建處理函式 (C_CREATE)
-  const handleCreateNew = () => {
-      if (finalSubmitData) {
-          createPaperMutation.mutate(finalSubmitData)
-      } else {
-          alert('數據遺失，請重新上傳。')
-          handleReset()
-      }
   }
 
   // NEW: 輔助函數：安全地將表單輸入 (string | number | "") 轉換為 number | undefined
@@ -666,75 +820,50 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
     )
   }
 
-  // RENDER STEP: COMPARISON (Phase 2 & Phase 3 Decision)
+  // RENDER STEP: COMPARISON (Phase 2 & Phase 3 Decision) (Step 4: 內容比對與合併)
   const renderComparisonStep = () => (
-      <div className="space-y-6">
-          <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
-              <h3 className="text-xl font-medium text-yellow-800">
-                  步驟 4: 內容比對與決策
-              </h3>
-              <p className="text-sm text-yellow-700 mt-1">
-                  系統已分析您新上傳的資源 ({finalSubmitData?.title || '無標題'})，請決定處理方式。
-              </p>
+    <div className="space-y-6">
+      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <ExclamationTriangleIcon className="h-5 w-5 text-blue-400" aria-hidden="true" />
           </div>
-          
-          {relatedSearchMutation.isLoading ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                  <p className="mt-4 text-lg font-medium text-gray-900">正在比對現有內容...</p>
-              </div>
-          ) : relatedPapers && relatedPapers.length > 0 ? (
-              <>
-                  <h4 className="text-lg font-semibold text-gray-900">潛在相關內容 ({relatedPapers.length} 個):</h4>
-                  <div className="space-y-4 max-h-60 overflow-y-auto border p-3 rounded-lg">
-                      {relatedPapers.map((paper) => (
-                          <div key={paper.id} className="p-3 border border-gray-200 rounded-lg flex justify-between items-center">
-                              <div>
-                                  <p className="font-medium text-gray-900">{paper.title}</p>
-                                  <p className="text-sm text-gray-600">類型: {paper.document_type} | 年份: {paper.publication_year}</p>
-                              </div>
-                              <button
-                                  onClick={() => handleIntegrate(paper.id)}
-                                  className="px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
-                              >
-                                  整合/附加檔案 (相關)
-                              </button>
-                          </div>
-                      ))}
-                  </div>
-                  
-                  <div className="flex justify-between space-x-3 pt-4 border-t border-gray-100">
-                      <button type="button" onClick={() => setStep('form_fill')} className="btn-secondary">
-                          &larr; 返回上一步修改元數據
-                      </button>
-                      <button
-                          type="button"
-                          onClick={() => handleCreateNew()}
-                          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                          否，建立為全新資源 (全新)
-                      </button>
-                  </div>
-              </>
-          ) : (
-              <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <h4 className="text-lg font-medium text-gray-900">未找到相關內容。</h4>
-                  <p className="text-gray-600 mt-2">請確認是否要建立為全新資源。</p>
-                  <div className="flex justify-center space-x-4 mt-4">
-                      <button type="button" onClick={() => setStep('form_fill')} className="btn-secondary">
-                          &larr; 返回檢查
-                      </button>
-                      <button
-                          type="button"
-                          onClick={() => handleCreateNew()}
-                          className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
-                      >
-                          確認建立全新資源 (全新)
-                      </button>
-                  </div>
-              </div>
-          )}
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-blue-800">發現潛在的重複項目</h3>
+            <p className="text-sm text-blue-700 mt-1">
+              系統檢測到資料庫中已有類似的資源。您可以選擇將新檔案<b>整合</b>到現有項目中，或者忽略並建立新項目。
+            </p>
+          </div>
+        </div>
       </div>
+
+      {/* 候選列表：使用獨立組件渲染，解決狀態衝突問題 */}
+      <div className="max-h-[55vh] overflow-y-auto pr-2 space-y-4 custom-scrollbar">
+        {relatedPapers?.map((paper) => (
+          <MergeCandidateCard
+            key={paper.id}
+            existingPaper={paper}
+            newData={finalSubmitData!}
+            onConfirm={handleProcessMerge}
+            isProcessing={isMerging}
+          />
+        ))}
+      </div>
+
+      {/* 底部操作：忽略合併 */}
+      <div className="border-t border-gray-200 pt-4 mt-4 flex justify-between items-center sticky bottom-0 bg-white">
+        <div className="text-sm text-gray-500">
+          這些都不是我要找的資源？
+        </div>
+        <button
+          onClick={() => finalSubmitData && createPaperMutation.mutate(finalSubmitData)}
+          className="px-5 py-2.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center"
+        >
+          <XMarkIcon className="h-4 w-4 mr-1" />
+          忽略合併，直接建立新資源
+        </button>
+      </div>
+    </div>
   )
 
   // -----------------------------------------------------------
