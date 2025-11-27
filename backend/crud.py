@@ -1,6 +1,7 @@
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, desc, or_, func, text
-from typing import List, Optional
+import unicodedata
+from sqlalchemy.orm import Session, joinedload, aliased
+from sqlalchemy import and_, desc, or_, func, text, exists, case
+from typing import List, Optional, Dict, Any
 from models import Paper, Author, PaperAuthor, Tag, PaperTag, Venue
 from schemas import (
     PaperCreate, PaperUpdate, AuthorCreate, TagCreate, VenueCreate, SearchFilters, 
@@ -28,7 +29,8 @@ def create_paper(db: Session, paper: PaperCreate):
         citation_count=paper.citation_count,
         venue_id=paper.venue_id,
         keywords=paper.keywords,
-        url=paper.url
+        url=paper.url,
+        document_type=paper.document_type # 新增 document_type 欄位
     )
     db.add(db_paper)
     db.commit()
@@ -521,3 +523,90 @@ def batch_remove_tags_from_papers(db: Session, paper_ids: List[int], tag_ids: Li
         updated_paper_ids=updated_paper_ids,
         errors=errors
     ) 
+
+def normalize_text(s: str):
+    if not s:
+        return ""
+    s = unicodedata.normalize("NFKC", s)
+    s = s.replace("\u00a0", " ").replace("\u202f", " ")
+    s = " ".join(s.split())  # 移除多餘空白
+    return s.strip().lower()
+
+
+def search_related_papers(db: Session, paper_data: PaperCreate, limit: int = 5):
+    # (0) DOI 精準匹配
+    if paper_data.doi:
+        doi_clean = paper_data.doi.strip().lower()
+        exists = (
+            db.query(Paper)
+            .filter(func.lower(Paper.doi) == doi_clean)
+            .options(joinedload(Paper.authors).joinedload(PaperAuthor.author))
+            .first()
+        )
+        if exists:
+            return [exists]
+
+    # (1) 標題比對
+    title_norm = normalize_text(paper_data.title)
+
+    # 使用 PostgreSQL LOWER + REPLACE 清洗資料庫字串
+    db_title_norm = func.lower(
+        func.replace(
+            func.replace(
+                func.replace(Paper.title, "\u00a0", " "),
+                "\u202f",
+                " "
+            ),
+            "  ",
+            " "
+        )
+    )
+
+    # 精準匹配（將雙空白變單空白）
+    exact = db_title_norm == title_norm
+
+    # 模糊匹配（不再用 %lowered_title%）
+    fuzzy = db_title_norm.ilike(f"%{title_norm[:20]}%")  # 前20字強匹配
+
+    query = (
+        db.query(Paper)
+        .options(joinedload(Paper.authors).joinedload(PaperAuthor.author))
+        .filter(or_(exact, fuzzy))
+    )
+
+    results = query.distinct().limit(limit).all()
+
+    if results:
+        return results
+
+    # fallback
+    return db.query(Paper).limit(limit).all()
+
+def merge_paper(db: Session, paper_id: int, new_data: PaperCreate, mode: str, fields: List[str] = None):
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        return None
+
+    if mode == "keep_old":
+        return paper
+
+    if mode == "overwrite":
+        # 直接覆蓋（完整更新）
+        update = PaperUpdate(**new_data.model_dump())
+        return update_paper(db, paper_id, update)
+
+    if mode == "merge_fields":
+        if not fields:
+            return paper
+        
+        update_dict = {}
+        raw = new_data.model_dump()
+
+        for f in fields:
+            if f in raw:
+                update_dict[f] = raw[f]
+
+        update = PaperUpdate(**update_dict)
+        return update_paper(db, paper_id, update)
+
+    return paper

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { Paper, SearchFilters, PaperCreate, Author, Tag, Venue, ExcelImportResult, ComplexSearchQuery, ExcelPreviewResponse, ExcelImportConfig, BatchTagOperation, BatchTagResult } from '../types'
+import { Paper, SearchFilters, PaperCreate, Author, Tag, Venue, ExcelImportResult, ComplexSearchQuery, ExcelPreviewResponse, ExcelImportConfig, BatchTagOperation, BatchTagResult, PDFInfoResponse } from '../types'
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
@@ -74,6 +74,34 @@ export const papersApi = {
     return response.data
   },
 
+  // 內容比對搜索 (Phase 2)
+  async searchRelated(paperData: PaperCreate): Promise<Paper[]> {
+    const response = await api.post('/papers/search/related/', paperData)
+    return response.data
+  },
+
+  // 合併論文（覆蓋 / 保留舊資料 / 欄位合併）
+  async mergePaper(
+    paperId: number,
+    newData: PaperCreate,
+    mode: "keep_old" | "overwrite" | "merge_fields",
+    fields?: string[]
+  ): Promise<Paper> {
+    // 修正：將 mode 和 fields 放入 URL Query String
+    const params = new URLSearchParams()
+    params.append('mode', mode)
+    
+    if (fields && fields.length > 0) {
+      fields.forEach(field => params.append('fields', field))
+    }
+
+    // 注意：newData (Body) 和 params (Query) 分開傳遞
+    const response = await api.post(
+      `/papers/${paperId}/merge/?${params.toString()}`, 
+      newData
+    )
+    return response.data;
+  },
   // 上傳 PDF 文件
   async uploadPdf(paperId: number, file: File): Promise<{ message: string; file_url: string }> {
     const formData = new FormData()
@@ -175,6 +203,19 @@ export const papersApi = {
     formData.append('file', file)
     
     const response = await api.post('/papers/import-excel/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+
+  // PDF 解析 API
+  async extractPdfInfo(file: File): Promise<PDFInfoResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await api.post('/papers/extract-pdf-info/', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

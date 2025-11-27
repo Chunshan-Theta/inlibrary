@@ -23,6 +23,7 @@ CREATE TABLE papers (
     id SERIAL PRIMARY KEY,
     title VARCHAR(1000) NOT NULL,
     abstract TEXT,
+    document_type VARCHAR(50) NOT NULL DEFAULT 'paper', -- 新增欄位
     publication_year INTEGER NOT NULL,
     doi VARCHAR(255) UNIQUE,
     citation_count INTEGER DEFAULT 0,

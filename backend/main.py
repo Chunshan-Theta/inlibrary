@@ -19,7 +19,8 @@ from schemas import (
     ExcelPreviewData,
     ExcelImportConfig,
     BatchTagOperation,
-    BatchTagResult
+    BatchTagResult,
+    PDFInfoResponse
 )
 from crud import (
     create_paper, get_papers, get_paper, update_paper, delete_paper,
@@ -27,12 +28,13 @@ from crud import (
     create_author, get_authors,
     create_tag, get_tags,
     create_venue, get_venues,
-    search_papers, search_papers_complex,
+    search_papers, search_papers_complex, search_related_papers,
     batch_add_tags_to_papers, batch_remove_tags_from_papers,
     count_all_papers, count_papers_with_tag
 )
 from minio_client import upload_file, download_file, delete_file
 from excel_import import import_excel_file, preview_file, get_default_field_mappings, import_file_with_config, import_file
+from pdf_parser import parse_pdf_for_metadata
 
 # 創建數據庫表
 Base.metadata.create_all(bind=engine)
@@ -155,6 +157,16 @@ async def search_papers_complex_endpoint(
     """處理複雜的 AND/OR 搜索查詢"""
     return search_papers_complex(db=db, query_data=query, skip=skip, limit=limit)
 
+# 內容比對搜索端點 (Phase 2: B_QUERY)
+@app.post("/papers/search/related/", response_model=List[PaperResponse])
+async def search_related_papers_endpoint(
+    paper_data: PaperCreate,
+    db: Session = Depends(get_db)
+):
+    """根據待新增資源的元數據，搜索潛在相關的現有資源。"""
+    related_papers = search_related_papers(db=db, paper_data=paper_data, limit=5)
+    return related_papers
+
 # 批量標籤操作端點
 @app.post("/papers/batch-tags/", response_model=BatchTagResult)
 async def batch_tag_operation(
@@ -196,6 +208,21 @@ async def venue_distribution(db: Session = Depends(get_db)):
 async def tag_distribution(db: Session = Depends(get_db)):
     """獲取前5名標籤分布"""
     return get_tag_distribution(db)
+
+@app.post("/papers/{paper_id}/merge/")
+async def merge_paper_endpoint(
+    paper_id: int,
+    new_data: PaperCreate,
+    mode: str = "overwrite",   # keep_old, overwrite, merge_fields
+    fields: List[str] = Query(None),  # 若 mode = merge_fields，前端會傳欄位列表
+    db: Session = Depends(get_db)
+):
+    from crud import merge_paper
+
+    merged = merge_paper(db, paper_id, new_data, mode, fields)
+    if merged is None:
+        raise HTTPException(status_code=404, detail="論文未找到")
+    return merged
 
 # 文件上傳下載端點
 @app.post("/papers/{paper_id}/upload-pdf/")
@@ -276,6 +303,39 @@ async def create_venue_endpoint(venue: VenueCreate, db: Session = Depends(get_db
 async def read_venues(db: Session = Depends(get_db)):
     """獲取期刊/會議列表"""
     return get_venues(db)
+
+# PDF 解析端點 (用於解讀 PDF)
+@app.post("/papers/extract-pdf-info/", response_model=PDFInfoResponse)
+async def extract_pdf_info_endpoint(
+    file: UploadFile = File(...)
+):
+    """
+    上傳 PDF 文件，嘗試自動解讀並提取論文元數據 (標題、摘要、作者、DOI 等)。
+    
+    此功能僅作元數據猜測，結果可能不完全準確，需手動確認。
+    """
+    # 1. 驗證文件類型
+    if file.content_type != 'application/pdf':
+        raise HTTPException(status_code=400, detail="只支持 PDF 文件")
+        
+    # 2. 讀取文件內容
+    try:
+        file_content = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"讀取文件失敗: {str(e)}")
+        
+    # 3. 解析元數據
+    try:
+        parsed_info = await parse_pdf_for_metadata(file_content)
+        return parsed_info
+    except Exception as e:
+        # 如果解析失敗，返回包含錯誤信息的響應，但狀態碼仍為 200 (表示 API 成功執行，但解析失敗)
+        print(f"PDF 解析發生錯誤: {e}")
+        return PDFInfoResponse(
+            extracted_text_snippet="PDF 解析發生內部錯誤，請檢查文件格式或後端日誌。",
+            title=None,
+            abstract=None
+        )
 
 # 文件預覽端點
 @app.post("/papers/preview-file/")

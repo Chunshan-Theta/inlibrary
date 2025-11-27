@@ -34,6 +34,7 @@ export interface Paper {
   id: number
   title: string
   abstract?: string
+  document_type: 'paper' | 'book' | 'video' | 'presentation' | string // 新增：檔案類型
   publication_year: number
   doi?: string
   citation_count: number
@@ -86,6 +87,7 @@ export interface PaperCreate {
   title: string
   abstract?: string
   publication_year: number
+  document_type?: 'paper' | 'book' | 'video' | 'presentation' | string // 新增：檔案類型
   doi?: string
   citation_count?: number
   venue_id?: number
@@ -163,3 +165,15 @@ export interface BatchTagResult {
   updated_paper_ids: number[]
   errors: string[]
 } 
+
+// PDF 解析結果類型
+export interface PDFInfoResponse {
+  title?: string
+  abstract?: string
+  publication_year?: number
+  doi?: string
+  venue?: string
+  authors?: string[] // <--- 確保是 string[]
+  keywords?: string[] // <--- 確保是 string[]
+  extracted_text_snippet?: string
+}
