@@ -5,23 +5,25 @@ from pypdf import PdfReader
 from schemas import PDFInfoResponse
 
 # 常量
-MAX_SNIPPET_LENGTH = 2000 # 增加提取長度以抓取更多頭部信息
+MAX_SNIPPET_LENGTH = 3000 # 增加提取長度以抓取更多頭部信息
 # 正則表達式：用於尋找 DOI 碼
 DOI_REGEX = re.compile(r'(10\.\d{4,9}\/[^\s"\'<>]*)', re.IGNORECASE) 
 # 正則表達式：用於尋找四位年份
 YEAR_REGEX = re.compile(r'(?:19|20)\d{2}') 
 # 正則表達式：用於尋找 Keywords 標籤
 KEYWORDS_REGEX = re.compile(r'(?:Keywords|關鍵詞):\s*(.*?)(?=\n\s*\d\.|\n\s*Introduction|\n\s*Abstract|\n\s*I\.)', re.IGNORECASE | re.DOTALL)
+# ISBN 正則表達式 (匹配 ISBN-10 或 ISBN-13) 尋找 "ISBN" 字樣開頭，後面跟著數字、橫槓或 X
+ISBN_REGEX = re.compile(r'ISBN(?:-1[03])?\s*:?\s*([0-9X-]{10,17})', re.IGNORECASE)
 
 def extract_text_from_pdf(file_content: bytes) -> str:
     """
-    使用 pypdf 從 PDF 內容中提取所有文本 (限制前 3 頁)。
+    使用 pypdf 從 PDF 內容中提取所有文本 (限制前 4 頁)。
     """
     try:
         reader = PdfReader(io.BytesIO(file_content))
         text = ""
         # 限制提取範圍以加快速度
-        for page in reader.pages[:3]:
+        for page in reader.pages[:4]:
             text += page.extract_text() or ""
         return text
     except Exception as e:
@@ -34,7 +36,7 @@ def guess_metadata_from_text(text: str) -> Dict[str, Any]:
     """
     data = {}
     
-    # 1. 提取前 2000 字作為片段
+    # 1. 提取前 3000 字作為片段
     snippet = text[:MAX_SNIPPET_LENGTH].strip()
     data['extracted_text_snippet'] = snippet
     
@@ -95,18 +97,26 @@ def guess_metadata_from_text(text: str) -> Dict[str, Any]:
     if doi_match:
         data['doi'] = doi_match.group(1).strip()
     
-    # 5. 猜測發表年份 (尋找前 500 字內的四位年份)
-    year_match = YEAR_REGEX.findall(snippet[:500])
+    # 5. 猜測 ISBN
+    # 優先權：如果沒有 DOI，或者明確抓到了 ISBN
+    isbn_match = ISBN_REGEX.search(snippet)
+    if isbn_match:
+        # 清理 ISBN 字串中的雜訊 (只留數字和X)
+        raw_isbn = isbn_match.group(1).strip()
+        data['isbn'] = raw_isbn
+
+    # 6. 猜測發表年份 (尋找前 800 字內的四位年份)
+    year_match = YEAR_REGEX.findall(snippet[:800])
     if year_match:
         data['publication_year'] = max(map(int, year_match))
 
-    # 6. 猜測摘要 (尋找 'Abstract' 或 '摘要' 後的文本)
+    # 7. 猜測摘要 (尋找 'Abstract' 或 '摘要' 後的文本)
     abstract_match = re.search(r'(abstract|摘要)\s*[\n\r]+(.*?)(?=\n\s*\d\.|\n\s*Introduction|\n\s*Keywords|\n\s*I\.)', text, re.IGNORECASE | re.DOTALL)
     if abstract_match:
         abstract_text = abstract_match.group(2).strip()
         data['abstract'] = abstract_text[:2000]
 
-    # 7. 猜測關鍵字 (搜索 Abstract 之後的 'Keywords')
+    # 8. 猜測關鍵字 (搜索 Abstract 之後的 'Keywords')
     data['keywords'] = []
     abstract_end_index = text.find(data.get('abstract', '')) + len(data.get('abstract', ''))
     
@@ -117,7 +127,7 @@ def guess_metadata_from_text(text: str) -> Dict[str, Any]:
         keywords_list = [k.strip() for k in re.split(r'[;,]', keywords_str) if k.strip()]
         data['keywords'] = keywords_list[:10]
         
-    # 8. 猜測期刊/會議
+    # 9. 猜測期刊/會議
     venue_match = re.search(r'(?:Journal|Conference|Proceedings of the|IEEE|ACM|Nature|Science|Educational|Education|Technologies)[\s\w]+', snippet, re.IGNORECASE)
     if venue_match:
         data['venue'] = venue_match.group(0).strip()

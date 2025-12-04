@@ -346,8 +346,20 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
             setValue('abstract', pdfInfo.abstract || initialData.abstract)
             // publication_year 優先使用解析結果，否則使用 mock 年份
             setValue('publication_year', pdfInfo.publication_year || initialData.publication_year || new Date().getFullYear()) 
-            setValue('doi', pdfInfo.doi || '')
-            
+
+            // 判斷 ISBN 與 DOI
+            if (pdfInfo.isbn) {
+                // 如果抓到了 ISBN，填入 DOI 欄位 (系統共用)
+                setValue('isbn', pdfInfo.isbn)
+                // 自動將類型切換為書籍
+                setDocumentType('book')
+                setValue('document_type', 'book')
+                console.log(`[PDF Extraction] 偵測到 ISBN: ${pdfInfo.isbn}，自動切換為書籍類型。`)
+            } else {
+                setValue('doi', pdfInfo.doi || '')
+                // 若只有 DOI 或都沒有，保持預設 (paper) 或依照檔名判斷
+            }
+
             // NEW: 設置作者和關鍵字 (將陣列轉換為逗號分隔字符串)
             if (pdfInfo.authors && pdfInfo.authors.length > 0) {
                 setValue('author_names', pdfInfo.authors.join(', '))
@@ -394,7 +406,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
     
     // 根據類型，清除不適用欄位的值
     if (type === 'book') {
-        setValue('doi', undefined)
+        //setValue('doi', undefined)
         setValue('venue_id', undefined)
         setValue('citation_count', 0)
     }
@@ -586,7 +598,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
             >
                 <BookOpenIcon className="h-10 w-10 text-green-600 mb-2" />
                 <span className="font-semibold text-lg">書籍/章節</span>
-                <span className="text-sm text-gray-500 mt-1">(無需 DOI, 期刊)</span>
+                <span className="text-sm text-gray-500 mt-1">(適用 ISBN, 無需 DOI, 期刊)</span>
             </button>
         </div>
         
@@ -663,20 +675,36 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
             </div>
           )}
 
-          {/* DOI (僅 Paper) / 唯一碼 (Book) */}
-          {isFieldVisible('doi') && (
-            <div>
-              <label htmlFor="doi" className="block text-sm font-medium text-gray-700 mb-1">
-                {isPaper ? 'DOI' : isBook ? 'ISBN/唯一碼' : '唯一碼'} 
-              </label>
-              <input
-                type="text"
-                id="doi"
-                {...register('doi')}
-                className="input-field"
-                placeholder={isPaper ? '10.1000/182' : 'ISBN 或 其他唯一碼 (非必填)'}
-              />
-            </div>
+          {/* DOI (僅 Paper) */}
+          {isFieldVisible('doi') && documentType === 'paper' && (
+              <div>
+                <label htmlFor="doi" className="block text-sm font-medium text-gray-700 mb-1">
+                  DOI
+                </label>
+                <input
+                  type="text"
+                  id="doi"
+                  {...register('doi')}
+                  className="input-field"
+                  placeholder="10.1000/182"
+                />
+              </div>
+          )}
+
+          {/* ISBN (僅 Book) */}
+          {documentType === 'book' && (
+              <div>
+                <label htmlFor="isbn" className="block text-sm font-medium text-gray-700 mb-1">
+                  ISBN
+                </label>
+                <input
+                  type="text"
+                  id="isbn"
+                  {...register('isbn')}
+                  className="input-field"
+                  placeholder="978-3-16-148410-0"
+                />
+              </div>
           )}
 
           {/* 引用數 (僅 Paper) */}
@@ -777,9 +805,9 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
                 id="author_names"
                 {...register('author_names')}
                 className="input-field"
-                placeholder="用逗號分隔姓名，如果作者不存在會自動創建"
+                placeholder="用逗號分隔姓名，例如：王小明, 李小華"
               />
-              <p className="mt-1 text-xs text-gray-500">請用逗號分隔多個姓名</p>
+              <p className="mt-1 text-xs text-gray-500">請用逗號分隔多個姓名，如果作者不存在會自動創建</p>
             </div>
         )}
 

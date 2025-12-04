@@ -37,6 +37,7 @@ export interface Paper {
   document_type: 'paper' | 'book' | 'video' | 'presentation' | string // 新增：檔案類型
   publication_year: number
   doi?: string
+  isbn?: string
   citation_count: number
   venue_id?: number
   pdf_file_path?: string
@@ -89,6 +90,7 @@ export interface PaperCreate {
   publication_year: number
   document_type?: 'paper' | 'book' | 'video' | 'presentation' | string // 新增：檔案類型
   doi?: string
+  isbn?: string
   citation_count?: number
   venue_id?: number
   keywords?: string[]
@@ -172,6 +174,7 @@ export interface PDFInfoResponse {
   abstract?: string
   publication_year?: number
   doi?: string
+  isbn?: string;
   venue?: string
   authors?: string[] // <--- 確保是 string[]
   keywords?: string[] // <--- 確保是 string[]

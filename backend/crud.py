@@ -26,6 +26,7 @@ def create_paper(db: Session, paper: PaperCreate):
         abstract=paper.abstract,
         publication_year=paper.publication_year,
         doi=paper.doi,
+        isbn=paper.isbn,
         citation_count=paper.citation_count,
         venue_id=paper.venue_id,
         keywords=paper.keywords,
@@ -579,8 +580,8 @@ def search_related_papers(db: Session, paper_data: PaperCreate, limit: int = 5):
     if results:
         return results
 
-    # fallback
-    return db.query(Paper).limit(limit).all()
+    # 找不到時回傳空陣列，直接建立新資料
+    return []
 
 def merge_paper(db: Session, paper_id: int, new_data: PaperCreate, mode: str, fields: List[str] = None):
     paper = db.query(Paper).filter(Paper.id == paper_id).first()
