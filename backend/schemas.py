@@ -74,6 +74,7 @@ class PaperBase(BaseModel):
     )
     document_type: Optional[str] = 'paper' # 新增：文件類型，預設為 'paper'
     doi: Optional[str] = None # 確保 DOI 可選/可為 None
+    isbn: Optional[str] = None
     citation_count: Optional[int] = 0
     venue_id: Optional[int] = None
     keywords: Optional[List[str]] = None
@@ -88,6 +89,7 @@ class PaperUpdate(BaseModel):
     abstract: Optional[str] = None
     publication_year: Optional[int] = None
     doi: Optional[str] = None
+    isbn: Optional[str] = None
     citation_count: Optional[int] = None
     venue_id: Optional[int] = None
     keywords: Optional[List[str]] = None
@@ -200,6 +202,7 @@ class PDFInfoResponse(BaseModel):
     abstract: Optional[str] = None
     publication_year: Optional[int] = None
     doi: Optional[str] = None
+    isbn: Optional[str] = None
     venue: Optional[str] = None  # 期刊/會議名稱
     authors: Optional[List[str]] = None
     keywords: Optional[List[str]] = None

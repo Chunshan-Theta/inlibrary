@@ -26,6 +26,7 @@ CREATE TABLE papers (
     document_type VARCHAR(50) NOT NULL DEFAULT 'paper', -- 新增欄位
     publication_year INTEGER NOT NULL,
     doi VARCHAR(255) UNIQUE,
+    isbn VARCHAR(50), -- 新增欄位
     citation_count INTEGER DEFAULT 0,
     venue_id INTEGER REFERENCES venues(id),
     pdf_file_path VARCHAR(500),
