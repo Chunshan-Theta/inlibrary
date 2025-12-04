@@ -347,18 +347,20 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
             // publication_year 優先使用解析結果，否則使用 mock 年份
             setValue('publication_year', pdfInfo.publication_year || initialData.publication_year || new Date().getFullYear()) 
 
-            // 判斷 ISBN 與 DOI
-            if (pdfInfo.isbn) {
-                // 如果抓到了 ISBN，填入 DOI 欄位 (系統共用)
-                setValue('isbn', pdfInfo.isbn)
-                // 自動將類型切換為書籍
-                setDocumentType('book')
-                setValue('document_type', 'book')
-                console.log(`[PDF Extraction] 偵測到 ISBN: ${pdfInfo.isbn}，自動切換為書籍類型。`)
-            } else {
-                setValue('doi', pdfInfo.doi || '')
-                // 若只有 DOI 或都沒有，保持預設 (paper) 或依照檔名判斷
-            }
+            // 只保留原本的 DOI 填寫
+            setValue('doi', pdfInfo.doi || '')
+            // // 判斷 ISBN 與 DOI
+            // if (pdfInfo.isbn) {
+            //     // 如果抓到了 ISBN，填入 DOI 欄位 (系統共用)
+            //     setValue('isbn', pdfInfo.isbn)
+            //     // 自動將類型切換為書籍
+            //     setDocumentType('book')
+            //     setValue('document_type', 'book')
+            //     console.log(`[PDF Extraction] 偵測到 ISBN: ${pdfInfo.isbn}，自動切換為書籍類型。`)
+            // } else {
+            //     setValue('doi', pdfInfo.doi || '')
+            //     // 若只有 DOI 或都沒有，保持預設 (paper) 或依照檔名判斷
+            // }
 
             // NEW: 設置作者和關鍵字 (將陣列轉換為逗號分隔字符串)
             if (pdfInfo.authors && pdfInfo.authors.length > 0) {
@@ -591,7 +593,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
                 <span className="text-sm text-gray-500 mt-1">(適用 DOI, 期刊/會議)</span>
             </button>
             
-            <button
+            {/* <button
                 type="button"
                 onClick={() => handlePdfTypeDecision('book')}
                 className="flex flex-col items-center p-6 border-2 border-transparent hover:border-blue-500 rounded-lg transition-all shadow-md w-40 bg-white"
@@ -599,7 +601,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
                 <BookOpenIcon className="h-10 w-10 text-green-600 mb-2" />
                 <span className="font-semibold text-lg">書籍/章節</span>
                 <span className="text-sm text-gray-500 mt-1">(適用 ISBN, 無需 DOI, 期刊)</span>
-            </button>
+            </button> */}
         </div>
         
         <button type="button" onClick={() => handleReset()} className="text-sm text-gray-500 hover:text-gray-700 mt-4">
