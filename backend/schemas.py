@@ -74,9 +74,10 @@ class PaperBase(BaseModel):
     )
     document_type: Optional[str] = 'paper' # 新增：文件類型，預設為 'paper'
     doi: Optional[str] = None # 確保 DOI 可選/可為 None
-    isbn: Optional[str] = None
+    isbn: Optional[str] = None # 新增：書籍專屬
     citation_count: Optional[int] = 0
     venue_id: Optional[int] = None
+    page_count: Optional[int] = None # 新增：ppt頁數
     keywords: Optional[List[str]] = None
     url: Optional[str] = None
 
@@ -89,12 +90,13 @@ class PaperUpdate(BaseModel):
     abstract: Optional[str] = None
     publication_year: Optional[int] = None
     doi: Optional[str] = None
-    isbn: Optional[str] = None
+    isbn: Optional[str] = None # 新增
     citation_count: Optional[int] = None
     venue_id: Optional[int] = None
     keywords: Optional[List[str]] = None
     pdf_file_path: Optional[str] = None
     file_size: Optional[int] = None
+    page_count: Optional[int] = None  # 新增
     url: Optional[str] = None
     author_ids: Optional[List[int]] = None
     tag_ids: Optional[List[int]] = None
@@ -196,7 +198,7 @@ class FileImportResult(BaseModel):
     errors: List[str]
     imported_papers: List[PaperResponse]
 
-# PDF 解析結果 Schema
+# PDF 解析結果 Schema  這個是用於回傳解析結果給前端預覽的
 class PDFInfoResponse(BaseModel):
     title: Optional[str] = None
     abstract: Optional[str] = None
@@ -206,6 +208,7 @@ class PDFInfoResponse(BaseModel):
     venue: Optional[str] = None  # 期刊/會議名稱
     authors: Optional[List[str]] = None
     keywords: Optional[List[str]] = None
+    page_count: Optional[int] = None # 新增：讓前端知道解析出了幾頁
     extracted_text_snippet: Optional[str] = None # 提取的前幾行文本，用於檢查
 
 # Excel compatibility aliases

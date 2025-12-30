@@ -36,11 +36,12 @@ class Paper(Base):
     document_type = Column(String(50), default='paper', nullable=False) # 新增：文件類型
     publication_year = Column(Integer, nullable=False)
     doi = Column(String(255), unique=True, nullable=True) # 修改：設為 nullable=True
-    isbn = Column(String(50), nullable=True)
+    isbn = Column(String(50), nullable=True) # 新增：書籍專屬
     citation_count = Column(Integer, default=0)
     venue_id = Column(Integer, ForeignKey("venues.id"))
     pdf_file_path = Column(String(500))
     file_size = Column(Integer)
+    page_count = Column(Integer, nullable=True) # 新增：頁數/投影片數
     url = Column(String(1000))  # 論文連結
     keywords = Column(ARRAY(String))
     created_at = Column(DateTime(timezone=True), server_default=func.now())

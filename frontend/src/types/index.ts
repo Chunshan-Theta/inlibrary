@@ -38,6 +38,7 @@ export interface Paper {
   publication_year: number
   doi?: string
   isbn?: string
+  page_count?: number
   citation_count: number
   venue_id?: number
   pdf_file_path?: string
@@ -91,6 +92,7 @@ export interface PaperCreate {
   document_type?: 'paper' | 'book' | 'video' | 'presentation' | string // 新增：檔案類型
   doi?: string
   isbn?: string
+  page_count?: number
   citation_count?: number
   venue_id?: number
   keywords?: string[]
@@ -174,7 +176,8 @@ export interface PDFInfoResponse {
   abstract?: string
   publication_year?: number
   doi?: string
-  isbn?: string;
+  isbn?: string
+  page_count?: number
   venue?: string
   authors?: string[] // <--- 確保是 string[]
   keywords?: string[] // <--- 確保是 string[]

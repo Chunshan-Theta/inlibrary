@@ -335,57 +335,76 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
           setValue(key, value, { shouldValidate: true })
       })
 
-      if (initialType === 'paper') {
+      // 如果是 Paper 或 Presentation (PPT)，都嘗試呼叫解析 API
+      if (initialType === 'paper'|| initialType === 'presentation') {
         // --- NEW LOGIC: PDF Extraction API Call ---
         try {
-            // 呼叫新的 API 進行解析
+            // 1. 呼叫 API 進行解析 這個 API 現在後端已經支援 PDF 和 PPTX 了
             const pdfInfo = await papersApi.extractPdfInfo(file)
             
-            // 根據 PDF 解析結果更新表單值
+            // 2. --- 填寫共用欄位 (這就是原本要保留的部分) ---
+            
+            // 標題、摘要、年份
             setValue('title', pdfInfo.title || initialData.title || '')
             setValue('abstract', pdfInfo.abstract || initialData.abstract)
-            // publication_year 優先使用解析結果，否則使用 mock 年份
             setValue('publication_year', pdfInfo.publication_year || initialData.publication_year || new Date().getFullYear()) 
 
-            // 判斷 ISBN 與 DOI
-            if (pdfInfo.isbn) {
-                // 如果抓到了 ISBN，填入 DOI 欄位 (系統共用)
-                setValue('isbn', pdfInfo.isbn)
-                // 自動將類型切換為書籍
-                setDocumentType('book')
-                setValue('document_type', 'book')
-                console.log(`[PDF Extraction] 偵測到 ISBN: ${pdfInfo.isbn}，自動切換為書籍類型。`)
-            } else {
-                setValue('doi', pdfInfo.doi || '')
-                // 若只有 DOI 或都沒有，保持預設 (paper) 或依照檔名判斷
-            }
-
-            // NEW: 設置作者和關鍵字 (將陣列轉換為逗號分隔字符串)
+            // 作者 (轉換陣列為逗號字串)
             if (pdfInfo.authors && pdfInfo.authors.length > 0) {
                 setValue('author_names', pdfInfo.authors.join(', '))
             }
+            
+            // 關鍵字 (轉換陣列為逗號字串)
             if (pdfInfo.keywords && pdfInfo.keywords.length > 0) {
-                setValue('keywords'as keyof PaperCreate, pdfInfo.keywords.join(', '))
+                // @ts-ignore 或使用您原本的轉型寫法
+                setValue('keywords' as keyof PaperCreate, pdfInfo.keywords.join(', '))
             }
             
-            // 檢查 venue (期刊/會議名稱) - 如果解析到名稱，可以提示用戶手動選擇
+            // 頁數 (如果有解析到的話)
+            if (pdfInfo.page_count) {
+                setValue('page_count', pdfInfo.page_count)
+            }
+            
+            // 期刊/會議名稱提示
             if (pdfInfo.venue) {
-                 console.log(`[PDF Extraction] 偵測到期刊/會議名稱: ${pdfInfo.venue}，請手動選擇。`);
-                 // 可以考慮將 venue 名稱顯示給用戶，但不自動設定 venue_id
+                 console.log(`[Extraction] 偵測到期刊/會議名稱: ${pdfInfo.venue}，請手動選擇。`);
             }
 
-            // Proceed to decision step with extracted data
-            setDocumentType('paper')
-            setValue('document_type', 'paper')
-            setStep('type_decision')
+            // 3. --- 類型判斷與分支 (這是修正的核心邏輯) ---
+            
+            // 情況 A: 偵測到 ISBN -> 強制轉為 書籍 (Book)
+            if (pdfInfo.isbn) {
+                setValue('isbn', pdfInfo.isbn)
+                setDocumentType('book')
+                setValue('document_type', 'book')
+                setStep('form_fill') // 書籍直接進入填寫，不用選
+                console.log(`[Extraction] 偵測到 ISBN: ${pdfInfo.isbn}，自動切換為書籍類型。`)
+            } 
+            // 情況 B: 原本就是 PPT -> 保持為 簡報 (Presentation)
+            else if (initialType === 'presentation') {
+                setDocumentType('presentation')
+                setValue('document_type', 'presentation')
+                setStep('form_fill') // PPT 直接進入填寫
+                console.log(`[Extraction] 保持為簡報類型。`)
+            }
+            // 情況 C: 剩下的就是 PDF 論文 (Paper)
+            else {
+                if (pdfInfo.doi) {
+                    setValue('doi', pdfInfo.doi)
+                }
+                setDocumentType('paper')
+                setValue('document_type', 'paper')
+                setStep('type_decision') // PDF 需要讓使用者再次確認 (Paper vs Book)
+            }
 
         } catch (error) {
-            console.error('PDF 元數據提取失敗:', error)
-            alert('PDF 元數據提取失敗，請手動填寫。')
-            // Fallback to decision step with initial mock data
-            setDocumentType('paper')
-            setValue('document_type', 'paper')
-            setStep('type_decision')
+            console.error('元數據提取失敗:', error)
+            alert('自動解析失敗，請手動填寫。')
+            
+            // 發生錯誤時的備用處理 (Fallback)
+            setDocumentType(initialType)
+            setValue('document_type', initialType)
+            setStep('form_fill')
         }
         // --- END NEW LOGIC ---
         
@@ -530,6 +549,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
         return !['venue_id', 'citation_count'].includes(field)
       case 'video':
       case 'presentation':
+        return ['title', 'publication_year', 'keywords', 'author_names', 'tag_names', 'url', 'abstract', 'page_count'].includes(field)
       case 'other':
         // 只顯示核心欄位
         return ['title', 'publication_year', 'keywords', 'author_names', 'tag_names', 'url', 'abstract'].includes(field)
@@ -721,6 +741,22 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
                 className="input-field"
                 min="0"
                 defaultValue={0}
+              />
+            </div>
+          )}
+
+          {/* 頁數 / 投影片數 */}
+          {isFieldVisible('page_count') && ( // 需要在 isFieldVisible 加上 page_count 的邏輯
+            <div>
+              <label htmlFor="page_count" className="block text-sm font-medium text-gray-700 mb-1">
+                {documentType === 'presentation' ? '投影片頁數' : '頁數'}
+              </label>
+              <input
+                type="number"
+                id="page_count"
+                {...register('page_count', { min: { value: 1, message: '頁數必須大於 0' } })}
+                className="input-field"
+                min="1"
               />
             </div>
           )}
