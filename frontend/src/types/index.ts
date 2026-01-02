@@ -39,6 +39,7 @@ export interface Paper {
   doi?: string
   isbn?: string
   page_count?: number
+  video_duration?: number
   citation_count: number
   venue_id?: number
   pdf_file_path?: string
@@ -93,6 +94,7 @@ export interface PaperCreate {
   doi?: string
   isbn?: string
   page_count?: number
+  video_duration?: number
   citation_count?: number
   venue_id?: number
   keywords?: string[]

@@ -409,10 +409,49 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
         // --- END NEW LOGIC ---
         
       } else {
-        // ... (existing logic for other file types)
+        // ... (existing logic for other file types) 先做共用的預設設定
         setDocumentType(initialType)
         setValue('document_type', initialType)
-        setStep('form_fill')
+        
+        //影片處理邏輯
+        if (initialType === 'video') {
+          // 1. 設定類型
+          setDocumentType('video')
+          setValue('document_type', 'video')
+          setStep('form_fill')
+
+          // 2. 使用 HTML5 Video API 抓取長度
+          const videoElement = document.createElement('video')
+          videoElement.preload = 'metadata'
+          
+          videoElement.onloadedmetadata = function() {
+            window.URL.revokeObjectURL(videoElement.src)
+            const duration = videoElement.duration // 這是總秒數 (例如 137.5)
+            
+            if (!isNaN(duration) && duration !== Infinity) {
+              const totalSeconds = Math.round(duration)
+              const mins = Math.floor(totalSeconds / 60)
+              const secs = totalSeconds % 60
+              
+              // 設定到我們新準備的分/秒欄位
+              // @ts-ignore - 因為這兩個欄位不在 PaperCreate Type 裡，我們用 ignore 或是手動擴充 type
+              setValue('duration_minutes', mins)
+              // @ts-ignore
+              setValue('duration_seconds', secs)
+              
+              console.log(`[Video] 自動偵測長度: ${mins}分 ${secs}秒`)
+            }
+          }
+          
+          videoElement.onerror = function() {
+            console.warn('無法自動讀取影片長度，可能是不支援的格式')
+          }
+          
+          videoElement.src = URL.createObjectURL(file)
+        } else {
+          //處理非影片的其他類型
+          setStep('form_fill')
+        }
       }
     }
   }
@@ -489,6 +528,19 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
         (keywordsInput as string).split(',').map((k: string) => k.trim()).filter((k: string) => k) : 
         []
       // --- 處理作者與標籤邏輯結束 ---
+
+      // 處理影片長度 (分+秒 -> 總秒數) 
+      let finalDurationSeconds: number | undefined = undefined;
+      
+      // 讀取我們自定義的臨時欄位 (需要轉型或是用 getValues)
+      // @ts-ignore
+      const mins = Number(data.duration_minutes) || 0;
+      // @ts-ignore
+      const secs = Number(data.duration_seconds) || 0;
+      
+      if (mins > 0 || secs > 0) {
+          finalDurationSeconds = (mins * 60) + secs;
+      }
       
       // 關鍵步驟：安全地解析數字字段
       const venueId = safeParseInt(data.venue_id);
@@ -519,10 +571,18 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
           
           // 5. 關鍵字
           keywords: keywords.length > 0 ? keywords : undefined,
+
+          // 寫入計算好的總秒數(影片)
+          video_duration: finalDurationSeconds,
           
           // 移除客戶端專用字段
           author_names: undefined,
-          tag_names: undefined
+          tag_names: undefined,
+          //移除暫時用欄位
+          // @ts-ignore
+          duration_minutes: undefined,
+          // @ts-ignore
+          duration_seconds: undefined
       } as PaperCreate;
 
       //createPaperMutation.mutate(submitData)
@@ -548,6 +608,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
         // 隱藏 venue_id, citation_count
         return !['venue_id', 'citation_count'].includes(field)
       case 'video':
+        return ['title', 'publication_year', 'keywords', 'author_names', 'tag_names', 'url', 'abstract', 'video_duration'].includes(field)
       case 'presentation':
         return ['title', 'publication_year', 'keywords', 'author_names', 'tag_names', 'url', 'abstract', 'page_count'].includes(field)
       case 'other':
@@ -758,6 +819,44 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
                 className="input-field"
                 min="1"
               />
+            </div>
+          )}
+
+          {/* 影片長度 (僅 Video) - 修改為 分+秒 介面 */}
+          {isFieldVisible('video_duration') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                影片長度
+              </label>
+              <div className="flex items-center space-x-2">
+                {/* 分鐘輸入框 */}
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    // @ts-ignore
+                    {...register('duration_minutes', { min: 0 })}
+                    className="input-field pr-8"
+                    placeholder="0"
+                    min="0"
+                  />
+                  <span className="absolute right-3 top-2 text-gray-500 text-sm">分</span>
+                </div>
+                
+                {/* 秒數輸入框 */}
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    // @ts-ignore
+                    {...register('duration_seconds', { min: 0, max: 59 })}
+                    className="input-field pr-8"
+                    placeholder="0"
+                    min="0"
+                    max="59"
+                  />
+                  <span className="absolute right-3 top-2 text-gray-500 text-sm">秒</span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">若上傳支援的影片格式，系統會自動填入</p>
             </div>
           )}
 

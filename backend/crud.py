@@ -28,6 +28,7 @@ def create_paper(db: Session, paper: PaperCreate):
         doi=paper.doi,
         isbn=paper.isbn,
         page_count=paper.page_count,
+        video_duration=paper.video_duration,
         citation_count=paper.citation_count,
         venue_id=paper.venue_id,
         keywords=paper.keywords,

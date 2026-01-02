@@ -239,8 +239,8 @@ async def upload_paper_pdf(
         raise HTTPException(status_code=404, detail="論文未找到")
     
     # 驗證文件類型
-    if not file.filename.lower().endswith(('.pdf', '.pptx', '.ppt', '.mp4')):
-        raise HTTPException(status_code=400, detail="只能上傳PDF,PPT,PPTX,MP4文件")
+    if not file.filename.lower().endswith(('.pdf', '.pptx', '.ppt', '.mp4', '.mov')):
+        raise HTTPException(status_code=400, detail="只能上傳PDF,PPT,PPTX,MP4,MOV文件")
     
     # 生成文件路徑
     file_path = f"papers/{paper_id}/{file.filename}"

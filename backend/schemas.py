@@ -78,6 +78,7 @@ class PaperBase(BaseModel):
     citation_count: Optional[int] = 0
     venue_id: Optional[int] = None
     page_count: Optional[int] = None # 新增：ppt頁數
+    video_duration: Optional[int] = None # 新增：影片時長（秒）
     keywords: Optional[List[str]] = None
     url: Optional[str] = None
 
@@ -97,6 +98,7 @@ class PaperUpdate(BaseModel):
     pdf_file_path: Optional[str] = None
     file_size: Optional[int] = None
     page_count: Optional[int] = None  # 新增
+    video_duration: Optional[int] = None  # 新增
     url: Optional[str] = None
     author_ids: Optional[List[int]] = None
     tag_ids: Optional[List[int]] = None

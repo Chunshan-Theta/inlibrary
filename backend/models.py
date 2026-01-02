@@ -42,6 +42,7 @@ class Paper(Base):
     pdf_file_path = Column(String(500))
     file_size = Column(Integer)
     page_count = Column(Integer, nullable=True) # 新增：頁數/投影片數
+    video_duration = Column(Integer, nullable=True) # 新增：影片時長（秒）
     url = Column(String(1000))  # 論文連結
     keywords = Column(ARRAY(String))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
