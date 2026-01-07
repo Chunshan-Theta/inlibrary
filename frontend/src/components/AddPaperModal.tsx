@@ -546,6 +546,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
       const venueId = safeParseInt(data.venue_id);
       const citationCount = safeParseInt(data.citation_count);
       const publicationYear = safeParseInt(data.publication_year);
+      const pageCount = safeParseInt(data.page_count);
       
       // 構建最終提交數據並進行類型清理和轉換
       const submitData: PaperCreate = {
@@ -571,6 +572,9 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
           
           // 5. 關鍵字
           keywords: keywords.length > 0 ? keywords : undefined,
+
+          // 如果有值就傳，沒值(undefined)就傳 undefined
+          page_count: pageCount,
 
           // 寫入計算好的總秒數(影片)
           video_duration: finalDurationSeconds,
@@ -603,17 +607,13 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
     
     switch (documentType) {
       case 'paper':
-        return true // 論文顯示所有欄位
+        return !['page_count', 'video_duration'].includes(field as string)
       case 'book':
-        // 隱藏 venue_id, citation_count
-        return !['venue_id', 'citation_count'].includes(field)
+        return !['venue_id', 'citation_count', 'page_count', 'video_duration'].includes(field as string)
       case 'video':
         return ['title', 'publication_year', 'keywords', 'author_names', 'tag_names', 'url', 'abstract', 'video_duration'].includes(field)
       case 'presentation':
         return ['title', 'publication_year', 'keywords', 'author_names', 'tag_names', 'url', 'abstract', 'page_count'].includes(field)
-      case 'other':
-        // 只顯示核心欄位
-        return ['title', 'publication_year', 'keywords', 'author_names', 'tag_names', 'url', 'abstract'].includes(field)
       default:
         return true
     }
