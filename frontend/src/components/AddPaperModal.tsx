@@ -628,7 +628,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
     <div className="space-y-6 text-center">
         <ArrowUpTrayIcon className="mx-auto h-12 w-12 text-blue-400" />
         <h3 className="text-xl font-medium text-gray-900">步驟 1: 上傳您的研究資源文件</h3>
-        <p className="text-gray-600">支援 PDF、書籍文件、影片 (MP4)、簡報 (PPT/PPTX) 和其他文件格式</p>
+        <p className="text-gray-600">支援 PDF、書籍文件、影片 (MP4/MOV)、簡報 (PPT/PPTX) 的文件格式</p>
         
         <div className="flex justify-center">
             <label htmlFor="resource_file" className="cursor-pointer">
