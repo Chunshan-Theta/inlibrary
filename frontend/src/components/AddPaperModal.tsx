@@ -335,65 +335,123 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
           setValue(key, value, { shouldValidate: true })
       })
 
-      if (initialType === 'paper') {
+      // 如果是 Paper 或 Presentation (PPT)，都嘗試呼叫解析 API
+      if (initialType === 'paper'|| initialType === 'presentation') {
         // --- NEW LOGIC: PDF Extraction API Call ---
         try {
-            // 呼叫新的 API 進行解析
+            // 1. 呼叫 API 進行解析 這個 API 現在後端已經支援 PDF 和 PPTX 了
             const pdfInfo = await papersApi.extractPdfInfo(file)
             
-            // 根據 PDF 解析結果更新表單值
+            // 2. --- 填寫共用欄位 (這就是原本要保留的部分) ---
+            
+            // 標題、摘要、年份
             setValue('title', pdfInfo.title || initialData.title || '')
             setValue('abstract', pdfInfo.abstract || initialData.abstract)
-            // publication_year 優先使用解析結果，否則使用 mock 年份
             setValue('publication_year', pdfInfo.publication_year || initialData.publication_year || new Date().getFullYear()) 
 
-            // 判斷 ISBN 與 DOI
-            if (pdfInfo.isbn) {
-                // 如果抓到了 ISBN，填入 DOI 欄位 (系統共用)
-                setValue('isbn', pdfInfo.isbn)
-                // 自動將類型切換為書籍
-                setDocumentType('book')
-                setValue('document_type', 'book')
-                console.log(`[PDF Extraction] 偵測到 ISBN: ${pdfInfo.isbn}，自動切換為書籍類型。`)
-            } else {
-                setValue('doi', pdfInfo.doi || '')
-                // 若只有 DOI 或都沒有，保持預設 (paper) 或依照檔名判斷
-            }
-
-            // NEW: 設置作者和關鍵字 (將陣列轉換為逗號分隔字符串)
+            // 作者 (轉換陣列為逗號字串)
             if (pdfInfo.authors && pdfInfo.authors.length > 0) {
                 setValue('author_names', pdfInfo.authors.join(', '))
             }
+            
+            // 關鍵字 (轉換陣列為逗號字串)
             if (pdfInfo.keywords && pdfInfo.keywords.length > 0) {
-                setValue('keywords'as keyof PaperCreate, pdfInfo.keywords.join(', '))
+                // @ts-ignore 或使用您原本的轉型寫法
+                setValue('keywords' as keyof PaperCreate, pdfInfo.keywords.join(', '))
             }
             
-            // 檢查 venue (期刊/會議名稱) - 如果解析到名稱，可以提示用戶手動選擇
+            // 頁數 (如果有解析到的話)
+            if (pdfInfo.page_count) {
+                setValue('page_count', pdfInfo.page_count)
+            }
+            
+            // 期刊/會議名稱提示
             if (pdfInfo.venue) {
-                 console.log(`[PDF Extraction] 偵測到期刊/會議名稱: ${pdfInfo.venue}，請手動選擇。`);
-                 // 可以考慮將 venue 名稱顯示給用戶，但不自動設定 venue_id
+                 console.log(`[Extraction] 偵測到期刊/會議名稱: ${pdfInfo.venue}，請手動選擇。`);
             }
 
-            // Proceed to decision step with extracted data
-            setDocumentType('paper')
-            setValue('document_type', 'paper')
-            setStep('type_decision')
+            // 3. --- 類型判斷與分支 (這是修正的核心邏輯) ---
+            
+            // 情況 A: 偵測到 ISBN -> 強制轉為 書籍 (Book)
+            if (pdfInfo.isbn) {
+                setValue('isbn', pdfInfo.isbn)
+                setDocumentType('book')
+                setValue('document_type', 'book')
+                setStep('form_fill') // 書籍直接進入填寫，不用選
+                console.log(`[Extraction] 偵測到 ISBN: ${pdfInfo.isbn}，自動切換為書籍類型。`)
+            } 
+            // 情況 B: 原本就是 PPT -> 保持為 簡報 (Presentation)
+            else if (initialType === 'presentation') {
+                setDocumentType('presentation')
+                setValue('document_type', 'presentation')
+                setStep('form_fill') // PPT 直接進入填寫
+                console.log(`[Extraction] 保持為簡報類型。`)
+            }
+            // 情況 C: 剩下的就是 PDF 論文 (Paper)
+            else {
+                if (pdfInfo.doi) {
+                    setValue('doi', pdfInfo.doi)
+                }
+                setDocumentType('paper')
+                setValue('document_type', 'paper')
+                setStep('type_decision') // PDF 需要讓使用者再次確認 (Paper vs Book)
+            }
 
         } catch (error) {
-            console.error('PDF 元數據提取失敗:', error)
-            alert('PDF 元數據提取失敗，請手動填寫。')
-            // Fallback to decision step with initial mock data
-            setDocumentType('paper')
-            setValue('document_type', 'paper')
-            setStep('type_decision')
+            console.error('元數據提取失敗:', error)
+            alert('自動解析失敗，請手動填寫。')
+            
+            // 發生錯誤時的備用處理 (Fallback)
+            setDocumentType(initialType)
+            setValue('document_type', initialType)
+            setStep('form_fill')
         }
         // --- END NEW LOGIC ---
         
       } else {
-        // ... (existing logic for other file types)
+        // ... (existing logic for other file types) 先做共用的預設設定
         setDocumentType(initialType)
         setValue('document_type', initialType)
-        setStep('form_fill')
+        
+        //影片處理邏輯
+        if (initialType === 'video') {
+          // 1. 設定類型
+          setDocumentType('video')
+          setValue('document_type', 'video')
+          setStep('form_fill')
+
+          // 2. 使用 HTML5 Video API 抓取長度
+          const videoElement = document.createElement('video')
+          videoElement.preload = 'metadata'
+          
+          videoElement.onloadedmetadata = function() {
+            window.URL.revokeObjectURL(videoElement.src)
+            const duration = videoElement.duration // 這是總秒數 (例如 137.5)
+            
+            if (!isNaN(duration) && duration !== Infinity) {
+              const totalSeconds = Math.round(duration)
+              const mins = Math.floor(totalSeconds / 60)
+              const secs = totalSeconds % 60
+              
+              // 設定到我們新準備的分/秒欄位
+              // @ts-ignore - 因為這兩個欄位不在 PaperCreate Type 裡，我們用 ignore 或是手動擴充 type
+              setValue('duration_minutes', mins)
+              // @ts-ignore
+              setValue('duration_seconds', secs)
+              
+              console.log(`[Video] 自動偵測長度: ${mins}分 ${secs}秒`)
+            }
+          }
+          
+          videoElement.onerror = function() {
+            console.warn('無法自動讀取影片長度，可能是不支援的格式')
+          }
+          
+          videoElement.src = URL.createObjectURL(file)
+        } else {
+          //處理非影片的其他類型
+          setStep('form_fill')
+        }
       }
     }
   }
@@ -470,11 +528,25 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
         (keywordsInput as string).split(',').map((k: string) => k.trim()).filter((k: string) => k) : 
         []
       // --- 處理作者與標籤邏輯結束 ---
+
+      // 處理影片長度 (分+秒 -> 總秒數) 
+      let finalDurationSeconds: number | undefined = undefined;
+      
+      // 讀取我們自定義的臨時欄位 (需要轉型或是用 getValues)
+      // @ts-ignore
+      const mins = Number(data.duration_minutes) || 0;
+      // @ts-ignore
+      const secs = Number(data.duration_seconds) || 0;
+      
+      if (mins > 0 || secs > 0) {
+          finalDurationSeconds = (mins * 60) + secs;
+      }
       
       // 關鍵步驟：安全地解析數字字段
       const venueId = safeParseInt(data.venue_id);
       const citationCount = safeParseInt(data.citation_count);
       const publicationYear = safeParseInt(data.publication_year);
+      const pageCount = safeParseInt(data.page_count);
       
       // 構建最終提交數據並進行類型清理和轉換
       const submitData: PaperCreate = {
@@ -500,10 +572,21 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
           
           // 5. 關鍵字
           keywords: keywords.length > 0 ? keywords : undefined,
+
+          // 如果有值就傳，沒值(undefined)就傳 undefined
+          page_count: pageCount,
+
+          // 寫入計算好的總秒數(影片)
+          video_duration: finalDurationSeconds,
           
           // 移除客戶端專用字段
           author_names: undefined,
-          tag_names: undefined
+          tag_names: undefined,
+          //移除暫時用欄位
+          // @ts-ignore
+          duration_minutes: undefined,
+          // @ts-ignore
+          duration_seconds: undefined
       } as PaperCreate;
 
       //createPaperMutation.mutate(submitData)
@@ -524,15 +607,13 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
     
     switch (documentType) {
       case 'paper':
-        return true // 論文顯示所有欄位
+        return !['page_count', 'video_duration'].includes(field as string)
       case 'book':
-        // 隱藏 venue_id, citation_count
-        return !['venue_id', 'citation_count'].includes(field)
+        return !['venue_id', 'citation_count', 'page_count', 'video_duration'].includes(field as string)
       case 'video':
+        return ['title', 'publication_year', 'keywords', 'author_names', 'tag_names', 'url', 'abstract', 'video_duration'].includes(field)
       case 'presentation':
-      case 'other':
-        // 只顯示核心欄位
-        return ['title', 'publication_year', 'keywords', 'author_names', 'tag_names', 'url', 'abstract'].includes(field)
+        return ['title', 'publication_year', 'keywords', 'author_names', 'tag_names', 'url', 'abstract', 'page_count'].includes(field)
       default:
         return true
     }
@@ -547,7 +628,7 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
     <div className="space-y-6 text-center">
         <ArrowUpTrayIcon className="mx-auto h-12 w-12 text-blue-400" />
         <h3 className="text-xl font-medium text-gray-900">步驟 1: 上傳您的研究資源文件</h3>
-        <p className="text-gray-600">支援 PDF、書籍文件、影片 (MP4)、簡報 (PPT/PPTX) 和其他文件格式</p>
+        <p className="text-gray-600">支援 PDF、書籍文件、影片 (MP4/MOV)、簡報 (PPT/PPTX) 的文件格式</p>
         
         <div className="flex justify-center">
             <label htmlFor="resource_file" className="cursor-pointer">
@@ -722,6 +803,60 @@ export default function AddPaperModal({ isOpen, onClose }: AddPaperModalProps) {
                 min="0"
                 defaultValue={0}
               />
+            </div>
+          )}
+
+          {/* 頁數 / 投影片數 */}
+          {isFieldVisible('page_count') && ( // 需要在 isFieldVisible 加上 page_count 的邏輯
+            <div>
+              <label htmlFor="page_count" className="block text-sm font-medium text-gray-700 mb-1">
+                {documentType === 'presentation' ? '投影片頁數' : '頁數'}
+              </label>
+              <input
+                type="number"
+                id="page_count"
+                {...register('page_count', { min: { value: 1, message: '頁數必須大於 0' } })}
+                className="input-field"
+                min="1"
+              />
+            </div>
+          )}
+
+          {/* 影片長度 (僅 Video) - 修改為 分+秒 介面 */}
+          {isFieldVisible('video_duration') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                影片長度
+              </label>
+              <div className="flex items-center space-x-2">
+                {/* 分鐘輸入框 */}
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    // @ts-ignore
+                    {...register('duration_minutes', { min: 0 })}
+                    className="input-field pr-8"
+                    placeholder="0"
+                    min="0"
+                  />
+                  <span className="absolute right-3 top-2 text-gray-500 text-sm">分</span>
+                </div>
+                
+                {/* 秒數輸入框 */}
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    // @ts-ignore
+                    {...register('duration_seconds', { min: 0, max: 59 })}
+                    className="input-field pr-8"
+                    placeholder="0"
+                    min="0"
+                    max="59"
+                  />
+                  <span className="absolute right-3 top-2 text-gray-500 text-sm">秒</span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">若上傳支援的影片格式，系統會自動填入</p>
             </div>
           )}
 

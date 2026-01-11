@@ -26,7 +26,9 @@ CREATE TABLE papers (
     document_type VARCHAR(50) NOT NULL DEFAULT 'paper', -- 新增欄位
     publication_year INTEGER NOT NULL,
     doi VARCHAR(255) UNIQUE,
-    isbn VARCHAR(50), -- 新增欄位
+    isbn VARCHAR(50), -- 新增欄位(book)
+    page_count INTEGER,       -- 新增欄位：記錄 PPT 頁數
+    video_duration INTEGER,   -- 新增欄位：記錄 影片長度 (秒)
     citation_count INTEGER DEFAULT 0,
     venue_id INTEGER REFERENCES venues(id),
     pdf_file_path VARCHAR(500),

@@ -35,6 +35,7 @@ from crud import (
 from minio_client import upload_file, download_file, delete_file
 from excel_import import import_excel_file, preview_file, get_default_field_mappings, import_file_with_config, import_file
 from pdf_parser import parse_pdf_for_metadata
+from ppt_parser import parse_pptx_for_metadata
 
 # 創建數據庫表
 Base.metadata.create_all(bind=engine)
@@ -231,15 +232,15 @@ async def upload_paper_pdf(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """上傳論文PDF文件"""
+    """上傳文件 (支援 PDF, PPT, PPTX, MP4)"""
     # 驗證論文是否存在
     paper = get_paper(db, paper_id=paper_id)
     if paper is None:
         raise HTTPException(status_code=404, detail="論文未找到")
     
     # 驗證文件類型
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="只能上傳PDF文件")
+    if not file.filename.lower().endswith(('.pdf', '.pptx', '.ppt', '.mp4', '.mov')):
+        raise HTTPException(status_code=400, detail="只能上傳PDF,PPT,PPTX,MP4,MOV文件")
     
     # 生成文件路徑
     file_path = f"papers/{paper_id}/{file.filename}"
@@ -304,19 +305,25 @@ async def read_venues(db: Session = Depends(get_db)):
     """獲取期刊/會議列表"""
     return get_venues(db)
 
-# PDF 解析端點 (用於解讀 PDF)
+# PDF 解析端點 (用於解讀 PDF 或 PPT)
 @app.post("/papers/extract-pdf-info/", response_model=PDFInfoResponse)
 async def extract_pdf_info_endpoint(
     file: UploadFile = File(...)
 ):
     """
-    上傳 PDF 文件，嘗試自動解讀並提取論文元數據 (標題、摘要、作者、DOI 等)。
+    上傳文件 (PDF 或 PPTX)，嘗試自動解讀並提取元數據。
     
     此功能僅作元數據猜測，結果可能不完全準確，需手動確認。
     """
-    # 1. 驗證文件類型
-    if file.content_type != 'application/pdf':
-        raise HTTPException(status_code=400, detail="只支持 PDF 文件")
+    # 0. 取得檔名與副檔名以利判斷
+    filename = file.filename.lower()
+    
+    # 1. 驗證文件類型 (擴充支援 PPT)
+    is_pdf = filename.endswith('.pdf') or file.content_type == 'application/pdf'
+    is_ppt = filename.endswith(('.pptx', '.ppt'))
+    
+    if not (is_pdf or is_ppt):
+        raise HTTPException(status_code=400, detail="目前只支持 PDF 或 PPT/PPTX 文件")
         
     # 2. 讀取文件內容
     try:
@@ -324,15 +331,22 @@ async def extract_pdf_info_endpoint(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"讀取文件失敗: {str(e)}")
         
-    # 3. 解析元數據
+    # 3. 解析元數據 (分流處理)
     try:
-        parsed_info = await parse_pdf_for_metadata(file_content)
+        if is_pdf:
+            # 原有的 PDF 處理
+            parsed_info = await parse_pdf_for_metadata(file_content)
+        else:
+            # 新增的 PPT 處理
+            parsed_info = await parse_pptx_for_metadata(file_content)
+            
         return parsed_info
+        
     except Exception as e:
-        # 如果解析失敗，返回包含錯誤信息的響應，但狀態碼仍為 200 (表示 API 成功執行，但解析失敗)
-        print(f"PDF 解析發生錯誤: {e}")
+        # 如果解析失敗，返回包含錯誤信息的響應，但狀態碼仍為 200
+        print(f"文件解析發生錯誤: {e}")
         return PDFInfoResponse(
-            extracted_text_snippet="PDF 解析發生內部錯誤，請檢查文件格式或後端日誌。",
+            extracted_text_snippet=f"解析發生內部錯誤 ({str(e)})，請檢查文件格式或後端日誌。",
             title=None,
             abstract=None
         )

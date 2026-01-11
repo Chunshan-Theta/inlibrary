@@ -11,7 +11,7 @@ DOI_REGEX = re.compile(r'(10\.\d{4,9}\/[^\s"\'<>]*)', re.IGNORECASE)
 # 正則表達式：用於尋找四位年份
 YEAR_REGEX = re.compile(r'(?:19|20)\d{2}') 
 # 正則表達式：用於尋找 Keywords 標籤
-KEYWORDS_REGEX = re.compile(r'(?:Keywords|關鍵詞):\s*(.*?)(?=\n\s*\d\.|\n\s*Introduction|\n\s*Abstract|\n\s*I\.)', re.IGNORECASE | re.DOTALL)
+KEYWORDS_REGEX = re.compile(r'(?:Keywords?|Key\s*words?|關鍵詞)(?::|—|-|\s)\s*(.*?)(?=\n\s*\d\.|\n\s*I\.|\n\s*Ⅰ\.|\n\s*Introduction|\n\s*Abstract|\n\s*Paper type)', re.IGNORECASE | re.DOTALL)
 # ISBN 正則表達式 (匹配 ISBN-10 或 ISBN-13) 尋找 "ISBN" 字樣開頭，後面跟著數字、橫槓或 X
 ISBN_REGEX = re.compile(r'ISBN(?:-1[03])?\s*:?\s*([0-9X-]{10,17})', re.IGNORECASE)
 
@@ -111,9 +111,9 @@ def guess_metadata_from_text(text: str) -> Dict[str, Any]:
         data['publication_year'] = max(map(int, year_match))
 
     # 7. 猜測摘要 (尋找 'Abstract' 或 '摘要' 後的文本)
-    abstract_match = re.search(r'(abstract|摘要)\s*[\n\r]+(.*?)(?=\n\s*\d\.|\n\s*Introduction|\n\s*Keywords|\n\s*I\.)', text, re.IGNORECASE | re.DOTALL)
+    abstract_match = re.search(r'(?:Abstract|摘要)(?::|—|-|\s)\s*(.*?)(?=\n\s*\d\.|\n\s*Introduction|\n\s*Keywords|\n\s*I\.|\n\s*Ⅰ\.)', text, re.IGNORECASE | re.DOTALL)
     if abstract_match:
-        abstract_text = abstract_match.group(2).strip()
+        abstract_text = abstract_match.group(1).strip()
         data['abstract'] = abstract_text[:2000]
 
     # 8. 猜測關鍵字 (搜索 Abstract 之後的 'Keywords')
