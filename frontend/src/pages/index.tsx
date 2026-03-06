@@ -10,8 +10,8 @@ import { ComplexSearchQuery } from '../types'
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState<ComplexSearchQuery | null>(null)
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  // const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  // const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
   const handleSearch = (query: ComplexSearchQuery) => {
     setSearchQuery(query)
@@ -38,22 +38,6 @@ export default function Home() {
               <h1 className="text-3xl font-bold text-gray-900">論文管理系統</h1>
               <p className="mt-2 text-gray-600">搜索、管理和組織研究論文</p>
             </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setIsImportModalOpen(true)}
-                className="btn-secondary flex items-center space-x-2"
-              >
-                <DocumentArrowUpIcon className="h-5 w-5" />
-                <span>文件導入</span>
-              </button>
-              <button
-                onClick={() => setIsAddModalOpen(true)}
-                className="btn-primary flex items-center space-x-2"
-              >
-                <PlusIcon className="h-5 w-5" />
-                <span>添加論文</span>
-              </button>
-            </div>
           </div>
 
           {/* 搜索表單 */}
@@ -72,18 +56,6 @@ export default function Home() {
             <PaperList searchQuery={searchQuery} />
           </div>
         </div>
-
-                {/* 添加論文彈窗 */}
-        <AddPaperModal 
-          isOpen={isAddModalOpen} 
-          onClose={() => setIsAddModalOpen(false)}
-        />
-
-        {/* 文件導入彈窗 */}
-        <ExcelImportModal 
-          isOpen={isImportModalOpen} 
-          onClose={() => setIsImportModalOpen(false)}
-        />
       </Layout>
     </>
   )
