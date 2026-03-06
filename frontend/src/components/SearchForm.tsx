@@ -2,7 +2,8 @@ import React, { useState } from 'react'
 import { useQuery } from 'react-query'
 import { ComplexSearchQuery, FilterGroup, FilterCondition } from '../types'
 import { authorsApi, tagsApi, venuesApi } from '../api/papers'
-import { PlusIcon, TrashIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, TrashIcon, ChevronDownIcon, ChevronRightIcon ,SparklesIcon } from '@heroicons/react/24/outline'
+import ChatSearchWizard from './ChatSearchWizard'
 
 interface QueryBuilderProps {
   onSearch: (query: ComplexSearchQuery) => void
@@ -44,12 +45,72 @@ const createSimpleGroup = (name: string, isFirst: boolean = false): SimpleGroup 
 
 export default function QueryBuilder({ onSearch, onReset }: QueryBuilderProps) {
   const [groups, setGroups] = useState<SimpleGroup[]>([createSimpleGroup('主要搜索', true)])
+  const [showWizard, setShowWizard] = useState(false) // 控制 Wizard 顯示
 
   // 獲取下拉選項數據
   const { data: authors } = useQuery('authors', authorsApi.getAuthors)
   const { data: tags } = useQuery('tags', tagsApi.getTags)
   const { data: venues } = useQuery('venues', venuesApi.getVenues)
 
+  // 建立一個 ref 來定位搜尋框
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  // 處理 Wizard 完成後的動作：自動填入關鍵字
+  const handleWizardComplete = (keyword: string) => {
+    console.log("AI 導航完成，接收到的關鍵字:", keyword);
+
+    setGroups(prevGroups => {
+      // 1. 深層複製
+      const newGroups = JSON.parse(JSON.stringify(prevGroups));
+
+      // 2. 判斷是否為「乾淨狀態」 (只有一個群組，且該群組只有一個空條件)
+      const isCleanState = newGroups.length === 1 && 
+                           newGroups[0].conditions.length === 1 && 
+                           (!newGroups[0].conditions[0].value || newGroups[0].conditions[0].value === '');
+
+      // 3. 準備兩個新條件 (標題 & 摘要)
+      // 使用既有的 helper function 建立物件，比較保險
+      const titleCondition = createSimpleCondition();
+      titleCondition.field = 'title_keyword';
+      titleCondition.value = keyword;
+      
+      const abstractCondition = createSimpleCondition();
+      abstractCondition.field = 'abstract_keyword';
+      abstractCondition.value = keyword;
+
+      if (isCleanState) {
+        // 情境 A：如果是全新的搜尋狀態 -> 直接覆蓋第一個群組的內容
+        console.log("情境 A: 覆蓋初始群組");
+        // 第一個群組直接放入這兩個條件 (群組內是 OR)
+        newGroups[0].conditions = [titleCondition, abstractCondition];
+      } else {
+        // 情境 B：已經有其他條件了 -> 建立一個「新群組」
+        console.log("情境 B: 追加新群組 (AND)");
+        
+        // createSimpleGroup(name, isFirst)
+        // isFirst=false 代表它會自動被設為 AND 邏輯 (連接上一個群組)
+        const newGroup = createSimpleGroup(`AI 推薦: ${keyword}`, false);
+        
+        // 將標題和摘要放入這個新群組 (群組內是 OR)
+        newGroup.conditions = [titleCondition, abstractCondition];
+        
+        // 加到群組列表最後
+        newGroups.push(newGroup);
+      }
+
+      return newGroups;
+    });
+
+    setShowWizard(false);
+    
+    // 捲動並聚焦
+    setTimeout(() => {
+        if (searchInputRef.current) {
+            searchInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            searchInputRef.current.focus();
+        }
+    }, 100);
+  };
+  
   // 群組操作
   const addGroup = () => {
     setGroups(prev => [...prev, createSimpleGroup(`搜索群組 ${prev.length}`, false)])
@@ -99,7 +160,7 @@ export default function QueryBuilder({ onSearch, onReset }: QueryBuilderProps) {
   }
 
   // 渲染條件輸入
-  const renderConditionInput = (condition: SimpleCondition, groupId: string) => {
+  const renderConditionInput = (condition: SimpleCondition, groupId: string, isFirstInput: boolean) => {
     const commonProps = {
       className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
       value: condition.value,
@@ -150,6 +211,8 @@ export default function QueryBuilder({ onSearch, onReset }: QueryBuilderProps) {
         return (
           <input
             {...commonProps}
+            // 如果這是第一個輸入框，綁定 searchInputRef；否則 undefined
+            ref={isFirstInput ? searchInputRef : undefined}
             type="text"
             placeholder="輸入搜索值..."
           />
@@ -158,97 +221,102 @@ export default function QueryBuilder({ onSearch, onReset }: QueryBuilderProps) {
   }
 
   // 渲染單個條件
-  const renderCondition = (condition: SimpleCondition, groupId: string, index: number, group: SimpleGroup) => (
-    <div key={condition.id} className="condition-item mb-4">
-      {/* 條件之間的邏輯操作符 */}
-      {index > 0 && (
-        <div className="flex justify-center mb-3">
-          <div className="flex items-center space-x-2 bg-gray-100 px-3 py-1 rounded-full">
-            <span className="text-sm text-gray-600">關係:</span>
-            <select
-              value={group.conditions[index - 1]?.logicOperator || 'OR'}
-              onChange={(e) => {
-                updateCondition(groupId, group.conditions[index - 1].id, { 
-                  logicOperator: 'OR' // 強制為OR
-                })
-              }}
-              className="border-0 bg-transparent text-sm font-medium focus:ring-0"
-            >
-              <option value="OR">或 (OR)</option>
-            </select>
+  const renderCondition = (condition: SimpleCondition, groupId: string, index: number, group: SimpleGroup, groupIndex: number) => {
+    // 判斷這是不是「第一個群組」的「第一個條件」
+    const isFirstInput = groupIndex === 0 && index === 0;
+    
+    return(
+      <div key={condition.id} className="condition-item mb-4">
+        {/* 條件之間的邏輯操作符 */}
+        {index > 0 && (
+          <div className="flex justify-center mb-3">
+            <div className="flex items-center space-x-2 bg-gray-100 px-3 py-1 rounded-full">
+              <span className="text-sm text-gray-600">關係:</span>
+              <select
+                value={group.conditions[index - 1]?.logicOperator || 'OR'}
+                onChange={(e) => {
+                  updateCondition(groupId, group.conditions[index - 1].id, { 
+                    logicOperator: 'OR' // 強制為OR
+                  })
+                }}
+                className="border-0 bg-transparent text-sm font-medium focus:ring-0"
+              >
+                <option value="OR">或 (OR)</option>
+              </select>
+            </div>
           </div>
-        </div>
-      )}
-      
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          {/* 字段選擇 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">搜索欄位</label>
-            <select
-              value={condition.field}
-              onChange={(e) => {
-                updateCondition(groupId, condition.id, { 
-                  field: e.target.value,
-                  value: e.target.value === 'tags' ? [] : ''
-                })
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="title_keyword">標題</option>
-              <option value="author_name">作者</option>
-              <option value="abstract_keyword">摘要</option>
-              <option value="year_from">年份(從)</option>
-              <option value="year_to">年份(到)</option>
-              <option value="min_citations">最小引用</option>
-              <option value="max_citations">最大引用</option>
-              <option value="venue_id">期刊/會議</option>
-              <option value="tags">標籤</option>
-            </select>
-          </div>
+        )}
+        
+        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            {/* 字段選擇 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">搜索欄位</label>
+              <select
+                value={condition.field}
+                onChange={(e) => {
+                  updateCondition(groupId, condition.id, { 
+                    field: e.target.value,
+                    value: e.target.value === 'tags' ? [] : ''
+                  })
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="title_keyword">標題</option>
+                <option value="author_name">作者</option>
+                <option value="abstract_keyword">摘要</option>
+                <option value="year_from">年份(從)</option>
+                <option value="year_to">年份(到)</option>
+                <option value="min_citations">最小引用</option>
+                <option value="max_citations">最大引用</option>
+                <option value="venue_id">期刊/會議</option>
+                <option value="tags">標籤</option>
+              </select>
+            </div>
 
-          {/* 操作符選擇 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">匹配方式</label>
-            <select
-              value={condition.operator}
-              onChange={(e) => {
-                updateCondition(groupId, condition.id, { operator: e.target.value })
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="contains">包含</option>
-              <option value="equals">完全匹配</option>
-              <option value="greater_than">大於</option>
-              <option value="less_than">小於</option>
-              <option value="greater_equal">大於等於</option>
-              <option value="less_equal">小於等於</option>
-            </select>
-          </div>
+            {/* 操作符選擇 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">匹配方式</label>
+              <select
+                value={condition.operator}
+                onChange={(e) => {
+                  updateCondition(groupId, condition.id, { operator: e.target.value })
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="contains">包含</option>
+                <option value="equals">完全匹配</option>
+                <option value="greater_than">大於</option>
+                <option value="less_than">小於</option>
+                <option value="greater_equal">大於等於</option>
+                <option value="less_equal">小於等於</option>
+              </select>
+            </div>
 
-          {/* 值輸入 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">搜索值</label>
-            {renderConditionInput(condition, groupId)}
-          </div>
+            {/* 值輸入 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">搜索值</label>
+              {renderConditionInput(condition, groupId, isFirstInput)}
+            </div>
 
-          {/* 移除按鈕 */}
-          <div>
-            <button
-              type="button"
-              onClick={() => removeCondition(groupId, condition.id)}
-              className="w-full md:w-auto px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center"
-              title="移除條件"
-              disabled={group.conditions.length === 1}
-            >
-              <TrashIcon className="h-4 w-4" />
-              <span className="ml-1 md:hidden">移除</span>
-            </button>
+            {/* 移除按鈕 */}
+            <div>
+              <button
+                type="button"
+                onClick={() => removeCondition(groupId, condition.id)}
+                className="w-full md:w-auto px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center"
+                title="移除條件"
+                disabled={group.conditions.length === 1}
+              >
+                <TrashIcon className="h-4 w-4" />
+                <span className="ml-1 md:hidden">移除</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   // 渲染群組
   const renderGroup = (group: SimpleGroup, index: number) => (
@@ -319,7 +387,7 @@ export default function QueryBuilder({ onSearch, onReset }: QueryBuilderProps) {
           <div className="p-4">
             {group.conditions.length > 0 ? (
               group.conditions.map((condition, conditionIndex) => 
-                renderCondition(condition, group.id, conditionIndex, group)
+                renderCondition(condition, group.id, conditionIndex, group, index)
               )
             ) : (
               <div className="text-center py-8 text-gray-500">
@@ -532,7 +600,31 @@ export default function QueryBuilder({ onSearch, onReset }: QueryBuilderProps) {
         <div className="text-center border-b border-gray-200 pb-4">
           <h2 className="text-2xl font-bold text-gray-900">進階搜索構建器</h2>
           <p className="text-gray-600 mt-1">構建複雜的搜索查詢條件</p>
+          {/* AI 引導按鈕 */}
+          {!showWizard && (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setShowWizard(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-full border border-blue-200 hover:shadow-md transition-all text-sm font-medium"
+              >
+                <SparklesIcon className="w-4 h-4 text-blue-600" />
+                <span>不知道搜尋什麼？點此使用 AI 關鍵字導航</span>
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Wizard 組件 */}
+        {/* 放在這裡，位於標題和搜尋群組之間 */}
+        {showWizard && (
+            <div className="mb-8">
+                <ChatSearchWizard 
+                    onComplete={handleWizardComplete} 
+                    onClose={() => setShowWizard(false)} 
+                />
+            </div>
+        )}
 
         {/* 群組列表 */}
         <div className="space-y-4">

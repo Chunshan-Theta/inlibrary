@@ -213,6 +213,45 @@ class PDFInfoResponse(BaseModel):
     page_count: Optional[int] = None # 新增：讓前端知道解析出了幾頁
     extracted_text_snippet: Optional[str] = None # 提取的前幾行文本，用於檢查
 
+# 定義單篇論文的結構
+class PaperRecommendation(BaseModel):
+    id: int
+    title: str
+    publication_year: int
+    citation_count: int
+    link: Optional[str] = None  # DOI 或 PDF 的連結
+
+# AI關鍵字導航
+class ChatOption(BaseModel):
+    label: str  # 顯示給使用者看 (中文)
+    value: str  # 實際搜尋關鍵字 (英文 Academic Term)
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[dict] = [] # 之前的對話紀錄 [{'role': 'user', 'content': '...'}, ...]
+
+class ChatResponse(BaseModel):
+    message: str # AI 的回應文字
+    options: List[ChatOption] = [] # 建議選項
+    recommendations: List[PaperRecommendation] = []
+
+# 接收「手動新增表單」傳來的資料結構
+class PaperManualCreate(BaseModel):
+    title: str
+    document_type: str = "paper"
+    authors: str
+    publication_year: Optional[int] = None
+    citation_count: Optional[int] = 0
+    doi: Optional[str] = None
+    isbn: Optional[str] = None
+    url: Optional[str] = None
+    abstract: Optional[str] = None
+    venue_id: Optional[int] = None
+    keywords: Optional[str] = None
+    tags: Optional[str] = None
+    page_count: Optional[int] = None
+    video_duration: Optional[int] = None
+
 # Excel compatibility aliases
 ExcelColumnInfo = FileColumnInfo
 ExcelPreviewData = FilePreviewData  
