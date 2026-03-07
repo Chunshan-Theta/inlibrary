@@ -43,6 +43,12 @@ export const papersApi = {
     return response.data
   },
 
+  // 手動建立資源 (處理字串格式)
+  async createPaperManually(paperData: any): Promise<any> {
+    const response = await api.post('/papers/manual', paperData)
+    return response.data
+  },
+
   // 搜索論文
   async searchPapers(filters: SearchFilters, skip = 0, limit = 100): Promise<Paper[]> {
     const params = new URLSearchParams()
