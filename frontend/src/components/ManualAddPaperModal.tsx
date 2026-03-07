@@ -269,9 +269,19 @@ export default function ManualAddPaperModal({ isOpen, onClose, onSuccess }: Manu
       }
       setIsLoading(false);
     },
-    onError: () => {
-      // 搜尋失敗 (可能 API 不通)，作為備案直接嘗試建立
-      if (finalSubmitData) executeCreate(finalSubmitData);
+    onError: (err: any) => {
+      // 🚨 搜尋失敗，不再硬做，直接噴錯誤讓開發者（你）看到
+      console.error("搜尋相關論文時發生錯誤：", err);
+      let errorMsg = err?.response?.data?.detail || err.message || '未知錯誤';
+      
+      // 解析可能出現的 422 陣列錯誤
+      if (Array.isArray(errorMsg)) {
+          errorMsg = errorMsg.map(e => `${e.loc?.join('.') || '欄位'}: ${e.msg}`).join(', ');
+      }
+      
+      setError(`⚠️ 檢查重複項目失敗：${errorMsg}，請檢查您的網路或重新整理。`);
+      setStep('form_fill');
+      setIsLoading(false);
     }
   });
 
