@@ -21,7 +21,7 @@ def preview_file(file_content: bytes, filename: str) -> ExcelPreviewData:
         file_ext = filename.lower().split('.')[-1]
         
         if file_ext in ['xlsx', 'xls']:
-            df = pd.read_excel(file_content)
+            df = pd.read_excel(io.BytesIO(file_content))
         elif file_ext == 'csv':
             df = pd.read_csv(io.BytesIO(file_content))
         elif file_ext == 'tsv':
@@ -258,7 +258,7 @@ def import_file_with_config(config: ExcelImportConfig, db: Session) -> ExcelImpo
         file_ext = filename.lower().split('.')[-1]
         
         if file_ext in ['xlsx', 'xls']:
-            df = pd.read_excel(file_content)
+            df = pd.read_excel(io.BytesIO(file_content))
         elif file_ext == 'csv':
             df = pd.read_csv(io.BytesIO(file_content))
         elif file_ext == 'tsv':
@@ -541,7 +541,7 @@ def import_file(db: Session, file_content: bytes, filename: str) -> ExcelImportR
         file_ext = filename.lower().split('.')[-1]
         
         if file_ext in ['xlsx', 'xls']:
-            df = pd.read_excel(file_content)
+            df = pd.read_excel(io.BytesIO(file_content))
         elif file_ext == 'csv':
             df = pd.read_csv(io.BytesIO(file_content))
         elif file_ext == 'tsv':
@@ -614,7 +614,7 @@ def import_excel_file(db: Session, file_content: bytes) -> ExcelImportResult:
     """導入Excel文件（兼容性函數）"""
     try:
         # 讀取Excel文件
-        df = pd.read_excel(file_content)
+        df = pd.read_excel(io.BytesIO(file_content))
         
         total_rows = len(df)
         successful_imports = 0

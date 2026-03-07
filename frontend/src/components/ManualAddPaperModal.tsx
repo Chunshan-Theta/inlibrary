@@ -259,31 +259,7 @@ export default function ManualAddPaperModal({ isOpen, onClose, onSuccess }: Manu
   };
 
   // 2. 搜尋重複項目的 Mutation
-  const relatedSearchMutation = useMutation(papersApi.searchRelated, {
-    onSuccess: (results) => {
-      if (results && results.length > 0) {
-        setRelatedPapers(results);
-        setStep('comparison'); // 進入比對畫面
-      } else {
-        if (finalSubmitData) executeCreate(finalSubmitData); // 無重複，直接建立
-      }
-      setIsLoading(false);
-    },
-    onError: (err: any) => {
-      // 🚨 搜尋失敗，不再硬做，直接噴錯誤讓開發者（你）看到
-      console.error("搜尋相關論文時發生錯誤：", err);
-      let errorMsg = err?.response?.data?.detail || err.message || '未知錯誤';
-      
-      // 解析可能出現的 422 陣列錯誤
-      if (Array.isArray(errorMsg)) {
-          errorMsg = errorMsg.map(e => `${e.loc?.join('.') || '欄位'}: ${e.msg}`).join(', ');
-      }
-      
-      setError(`⚠️ 檢查重複項目失敗：${errorMsg}，請檢查您的網路或重新整理。`);
-      setStep('form_fill');
-      setIsLoading(false);
-    }
-  });
+  const relatedSearchMutation = useMutation(papersApi.searchRelated);
 
   // 3. 表單送出：攔截並先進行搜尋
   const handleSubmit = async (e: React.FormEvent) => {
@@ -312,8 +288,6 @@ export default function ManualAddPaperModal({ isOpen, onClose, onSuccess }: Manu
       video_duration: totalSeconds > 0 ? totalSeconds : undefined 
     };
 
-    setFinalSubmitData(submitPayload);
-
     // 📦 包裹 B：這是專門用來「搜尋重複」的 (給空陣列以防 422 報錯)
     const searchPayload = {
       title: formData.title,
@@ -329,9 +303,31 @@ export default function ManualAddPaperModal({ isOpen, onClose, onSuccess }: Manu
       tag_ids: [],
       keywords: []
     };
+    
+    setFinalSubmitData(submitPayload);
 
-    // 觸發搜尋，把專用包裹 B 丟過去檢查
-    relatedSearchMutation.mutate(searchPayload as any); 
+    // 👇 觸發搜尋，並把成功/失敗的邏輯寫在這裡
+    relatedSearchMutation.mutate(searchPayload as any, {
+      onSuccess: (results) => {
+        if (results && results.length > 0) {
+          setRelatedPapers(results);
+          setStep('comparison'); // 進入比對畫面
+        } else {
+          executeCreate(submitPayload);
+        }
+        setIsLoading(false);
+      },
+      onError: (err: any) => {
+        console.error("搜尋相關論文時發生錯誤：", err);
+        let errorMsg = err?.response?.data?.detail || err.message || '未知錯誤';
+        if (Array.isArray(errorMsg)) {
+            errorMsg = errorMsg.map((e: any) => `${e.loc?.join('.') || '欄位'}: ${e.msg}`).join(', ');
+        }
+        setError(`⚠️ 檢查重複項目失敗：${errorMsg}，請檢查您的網路或重新整理。`);
+        setStep('form_fill');
+        setIsLoading(false);
+      }
+    });  
   };
 
   // 4. 處理合併
