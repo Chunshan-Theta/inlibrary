@@ -234,17 +234,8 @@ export default function ManualAddPaperModal({ isOpen, onClose, onSuccess }: Manu
     setIsLoading(true);
     setError(null);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/papers/manual`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || '新增資源失敗');
-      }
+      //直接呼叫 api/papers.ts 裡面的函式，不需自己處理 URL
+      await papersApi.createPaperManually(payload);
 
       queryClient.invalidateQueries('papers');
       handleReset();
@@ -252,14 +243,12 @@ export default function ManualAddPaperModal({ isOpen, onClose, onSuccess }: Manu
       onClose();
       alert('手動建檔成功！');
     } catch (err: any) {
-      // 👇 攔截後端報錯，翻譯成友善的中文提示
-      const errorMsg = err.message || '';
+      // 攔截後端報錯，翻譯成友善的中文提示
+      const errorMsg = err?.response?.data?.detail || err.message || '';
       
       if (errorMsg.includes('500') || errorMsg.includes('duplicate') || errorMsg.includes('UniqueViolation')) {
-        // 如果是 500 錯誤或重複鍵值錯誤
         setError('⚠️ 建立失敗：您輸入的 DOI 或 ISBN 已經存在於資料庫中，請修改後再試！');
       } else {
-        // 其他格式錯誤
         setError(`⚠️ 建立失敗：${errorMsg}，請檢查欄位格式。`);
       }
       
